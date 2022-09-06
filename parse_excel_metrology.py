@@ -10,6 +10,7 @@ from openpyxl.styles import PatternFill
 import argparse
 import app_logger
 import parse_fgis
+from work_db import WorkDb
 
 logger = app_logger.get_logger(__name__)
 # Константы
@@ -81,7 +82,7 @@ def get_worksheet(namefile: str):
     """
     logger.info(f"Пытаемся открыть файл {namefile}")
     if os.path.isfile(namefile):
-        workbook = openpyxl.load_workbook(namefile)
+        workbook = openpyxl.load_workbook(namefile, data_only=True)
         worksheet = workbook['Прил.1.1 (Сч,ТТ,ТН)']
         logger.info(f"Файл {namefile} успешно открыт")
         return workbook, worksheet
@@ -144,6 +145,7 @@ def get_parse_si(si_for_parse: str, verif_year, mode='fgis', namefile=''):
     :return:
     """
     logger.info("Старт get_parse_si()")
+    Fill = PatternFill(start_color='cccc9966', end_color='cccc9933', fill_type='solid')
     # Открываем файл и получаем объект листа
     workbook, worksheet = get_worksheet(namefile)
     if workbook != None and worksheet != None:
@@ -173,16 +175,59 @@ def get_parse_si(si_for_parse: str, verif_year, mode='fgis', namefile=''):
                     logger.info("Получаем номер текущего СИ")
                     current_serial = worksheet.cell(row=r, column=number_col).value
                     logger.info(f"Заводской номер текущего СИ - {current_serial}")
-                    logger.info(
-                        f"Попытка запроса данных из БД ФГИС по текущему номеру СИ - {current_serial} и году поверки - {verif_year}")
-                    dict_request = format_dict_requests(title=si,
-                                                        number=current_serial,
-                                                        verif_year=year,
-                                                        rows=str(20))
-                    print(dict_request)
-                    parse_fgis.get_data_from_fgis(dict_request)
+                    match mode:
+                        case ['fgis']:
+                            request_fgis(current_serial, si, verif_year, year)
+                        case ['local']:
+                            current_si_type = worksheet.cell(row=r, column=type_col).value
+                            local_request = request_local(current_serial, si, year, current_si_type)
+                            href = get_href(local_request)
+                            worksheet.cell(row=r, column=href_col).value = href
+                            worksheet.cell(row=r, column=href_col).fill = Fill
+                    # worksheet.cell(row=r, column=number_col).fill = Fill
                 else:
                     pass
+
+
+def request_fgis(current_serial, si, verif_year, year):
+    """
+    Метод для запроса в БД ФГИС
+
+    :param current_serial: текущий номер СИ
+    :param si: наименование типа СИ
+    :param verif_year: год поверки для проверки
+    :param year: год поверки текущего СИ
+    :return:
+    """
+    logger.info(
+        f"Попытка запроса данных из БД ФГИС по текущему номеру СИ - {current_serial} и году поверки - {verif_year}")
+    dict_request = format_dict_requests(title=si,
+                                        number=current_serial,
+                                        verif_year=year,
+                                        rows=str(20))
+    print(dict_request)
+    parse_fgis.get_data_from_fgis(dict_request)
+
+def request_local(serial, si, year, current_type):
+    """
+    Обращаемся к локальной БД для получения данных по номеру, типу СИ
+    и году поверки
+    :param serial: номер СИ
+    :param si: тип СИ
+    :param year: год поверки СИ
+    :param current_type: наименование типа СИ
+    :return: словарь с данными по текущему СИ
+    """
+    pass
+
+def get_href(local_request):
+    """
+    Метод для разбора словаря с данными по СИ
+    и получения ссылки из него
+    :param local_request: словарь с данными
+    :return: строка, содержащая ссылку на карточку СИ
+    """
+    pass
 
 def main():
     logger.info("Запуск скрипта!")

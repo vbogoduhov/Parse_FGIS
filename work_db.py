@@ -243,37 +243,163 @@ class WorkDb:
         else:
             return True if mode in WorkDb.MODE_CHECK else False
 
+    def __parse_dict_filter_for_card(self, dict_filter):
+        """
+        Парсим словарь и возвращаем данные
+        :param dict_filter: словарь
+        :return: данные по отдельности
+        """
+        return dict_filter['serial_si'], dict_filter['name_si'], dict_filter['verif_year'], dict_filter['type_si']
 
-def connect_db(database="fgis",
-                 user="cnt",
-                 password="cnt",
-                 port="5432",
-                 host="10.48.153.106"):
+    def __format_get_metrology_query(self, serial_si, name_si, verif_year, type_si):
+        """
+        Форматируем и формируем строку запроса в БД,
+        для получения данных по СИ
+        :param serial_si: номер СИ
+        :param name_si: наименование СИ
+        :param verif_year: год поверки СИ
+        :param type_si: тип СИ
+        :return: строка SQL-запроса
+        """
+        pass
+
+    def get_card_for_si(self, dict_filter):
+        """
+        Метод для получения данных из БД по текущему СИ
+        :param dict_filter: словарь с данными
+        :return: список карточек по найденным совпадениям
+        """
+        serial_si, name_si, verif_year, type_si = self.__parse_dict_filter_for_card(dict_filter)
+
+
+class CardFgis:
     """
-    Подключение к БД. Возвращает объект connect и cursor.
-
-    :param database: имя БД
-    :param user: имя пользователя
-    :param password: пароль
-    :param port: порт для подключения
-    :param host: адрес сервера
-
-    :return: объект connect и объект cursor
+    Класс, описывающий структуру данных - карточек ФГИС
+    по средствам измерений. Содержит поля, как в карточке ФГИС:
+        1. mi_mitnumber - регистрационный номер типа СИ в БД ФГИС;
+        2. mi_modification - модификация типа СИ;
+        3. mi_number - заводской номер СИ;
+        4. valid_date - дата следующей поверки;
+        5. result_docnum - серия и номер свидетельства о поверки СИ;
+        6. mi_mitype - тип СИ;
+        7. mi_mititle - наименование СИ;
+        8. org_title - органицазия поверитель;
+        9. applicability - флаг пригодности СИ, пригоден, если True, непригоден, если False;
+        10. vri_id - уникалный идентификатор СИ в БД ФГИС;
+        11. verification_date - дата последней поверки по данным ФГИС;
+        12. href - ссылка на карточку СИ в БД ФГИС.
     """
-    try:
-        conn = psql.connect(database=database,
-                            user=user,
-                            password=password,
-                            host=host,
-                            port=port)
-        cur = conn.cursor()
-        return conn, cur
-    except:
-        raise ErrorConnectionDb
 
-def create_table():
-    pass
+    def __init__(self, init_data: tuple):
+        self.IND_PROP = {'mi_mitnumber': 0,
+                    'mi_modification': 1,
+                    'mi_number': 2,
+                    'valid_date': 3,
+                    'result_docnum': 4,
+                    'mi_mitype': 5,
+                    'mi_mititle': 6,
+                    'org_title': 7,
+                    'applicability': 8,
+                    'vri_id': 9,
+                    'verification_date': 10,
+                    'href': 11}
+        self.__card = init_data
 
+    @property
+    def mi_mitnumber(self):
+        """
+        Возвращаем регистрационный номер типа СИ
+        :return: регистрационный номер типа СИ
+        """
+        return self.__card[0]
+
+    @property
+    def mi_modification(self):
+        """
+        Модификация типа СИ
+        :return: модификация типа СИ
+        """
+        return self.__card[1]
+
+    @property
+    def mi_number(self):
+        """
+        Заводской номер СИ
+        :return: заводской номер СИ
+        """
+        return self.__card[2]
+
+    @property
+    def valid_date(self):
+        """
+        Дата следующей поверки
+        :return: дата следующей поверки
+        """
+        return self.__card[3]
+
+    @property
+    def result_docnum(self):
+        """
+        Серия и номер свидетельства о поверке
+        :return: номер свидетельства о поверке
+        """
+        return self.__card[4]
+
+    @property
+    def mi_mitype(self):
+        """
+        Тип СИ
+        :return: тип СИ
+        """
+        return self.__card[5]
+
+    @property
+    def mi_mititle(self):
+        """
+        Наименование СИ
+        :return: наименование СИ
+        """
+        return self.__card[6]
+
+    @property
+    def org_title(self):
+        """
+        Организация-поверитель
+        :return: наименование организации-поверителя
+        """
+        return self.__card[7]
+
+    @property
+    def applicability(self):
+        """
+        Флаг пригодности к измерениям
+        :return: False или True
+        """
+        return self.__card[8]
+
+    @property
+    def vri_id(self):
+        """
+        Уникальный идентификатор в БД ФГИС
+        :return: идентификатор
+        """
+        return self.__card[9]
+
+    @property
+    def verification_date(self):
+        """
+        Дата последней поверки
+        :return: дата последней поверки из БД ФГИС
+        """
+        return self.__card[10]
+
+    @property
+    def href(self):
+        """
+        Ссылка на карточку СИ
+        :return: ссылка
+        """
+        return self.__card[11]
 
 
 def main():

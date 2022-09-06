@@ -176,9 +176,9 @@ def get_parse_si(si_for_parse: str, verif_year, mode='fgis', namefile=''):
                     current_serial = worksheet.cell(row=r, column=number_col).value
                     logger.info(f"Заводской номер текущего СИ - {current_serial}")
                     match mode:
-                        case ['fgis']:
+                        case 'fgis':
                             request_fgis(current_serial, si, verif_year, year)
-                        case ['local']:
+                        case 'local':
                             current_si_type = worksheet.cell(row=r, column=type_col).value
                             local_request = request_local(current_serial, si, year, current_si_type)
                             href = get_href(local_request)

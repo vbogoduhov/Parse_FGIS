@@ -1,7 +1,10 @@
+import os.path
+
 import psycopg2 as psql
 import app_logger
 
 logger = app_logger.get_logger(__name__)
+output_data_metrology = app_logger.get_logger('Data_from_metrology')
 
 class WorkDb:
     MODE_CHECK = {'title': 'tbtitle',
@@ -9,7 +12,8 @@ class WorkDb:
                   'type_title': 'tbtype',
                   'type_number': 'tbtype',
                   'name_org': 'tborgmetrology',
-                  'si_number': 'tbmetrology'}
+                  'si_number': 'tbmetrology',
+                  'type': 'tbtype'}
 
     def __init__(self, database="fgis",
                  user="postgres",
@@ -34,8 +38,24 @@ class WorkDb:
                            'type_title': 'id_type',
                            'type_number': 'id_type',
                            'name_org': 'id_org',
-                           'si_number': 'si_number'}
+                           'si_number': 'si_number',
+                           'type': 'id_type'}
+        self.namefile_sql_scripts = 'query_metrology.sql'
+        self.lst_sql_scripts_metrology = self.__get_sql_scripts()
 
+    def __get_sql_scripts(self):
+        """
+        Открываем файл с запросами к таблице tbmetrology,
+        читаем и возвращем словарь с запросами
+        :return: словарь с запросами
+        """
+        if os.path.isfile(self.namefile_sql_scripts):
+            with open(self.namefile_sql_scripts, "r") as sql_file:
+                querys = sql_file.read()
+                lst_query = querys.split(sep=";")
+            return lst_query
+        else:
+            logger.warning(f"Невозможно открыть файл {self.namefile_sql_scripts}, поскольку файл не существует")
 
     def __create_table(self):
         """"
@@ -61,21 +81,27 @@ class WorkDb:
                                 значения - значения столбцов
         :return:
         """
+        print("Начало __write_data_on_db...")
         lst_name_column = list(dict_for_write.keys())
         lst_values = [dict_for_write[key] for key in lst_name_column]
         format_sql_query = f"""insert into {table} ({', '.join(map(str, lst_name_column))}) values ({", ".join(map(lambda x: f"'{x}'", lst_values))});"""
+        print(f"Попытка записи names_columns: {lst_name_column}\n values: {lst_values}")
         logger.info(f"Попытка выполнения запроса на запись: {format_sql_query}")
         try:
             self.cursor.execute(format_sql_query)
             self.connect.commit()
+            print("Запись удалась")
             return True
         except:
             self.connect.rollback()
+            print("Запись не удалась\n")
             logger.warning(f"Не удалось выполнить запрос <{format_sql_query}>")
             return False
 
     def write_metrology(self, dict_for_write):
+        logger.info(f"Начало работы функции write_metrology для данных {dict_for_write}")
         self.__write_data_on_db("tbmetrology", dict_for_write)
+        logger.info(f"Окончание работы функции write_metrology для данных {dict_for_write}")
 
     def __get_data_from_db(self, sql_query):
         """
@@ -112,6 +138,31 @@ class WorkDb:
                 logger.warning("Не удалось получить список таблиц из БД")
         else:
             logger.info(f"Объект cursor() = None")
+
+    @property
+    def types(self):
+        """
+        Список типов СИ
+        :return:
+        """
+        try:
+            logger.info(f"Получаем список типов СИ из БД")
+            self.cursor.execute("""select id_type, type_title from tbtype""")
+            rOut = self.cursor.fetchall()
+            lst_types = [[item[0], item[1]] for item in rOut]
+            return lst_types
+        except:
+            logger.warning("Не удалось получить список типов СИ из БД.")
+
+    @property
+    def modifications(self):
+        try:
+            self.cursor.execute("""select id_mod, modification from tbmodification""")
+            rOut = self.cursor.fetchall()
+            lst_mod = [[item[0], item[1]] for item in rOut]
+            return lst_mod
+        except:
+            logger.warning("Не удалось получить список модификаций из БД.")
 
     def connect_db(self):
         """
@@ -181,7 +232,10 @@ class WorkDb:
         :return: строка запроса
         """
         if mode == "read":
-            query = f"""select {column} from {table} where {filter} = '{value}';"""
+            if type(filter) is list:
+                query = f"""select {column} from {table} where {filter[0]} = '{value[0]}' and {filter[1]} = '{value[1]}';"""
+            else:
+                query = f"""select {column} from {table} where {filter} = '{value}';"""
             return query
         elif mode == "write":
             if table == "tbtype":
@@ -203,7 +257,11 @@ class WorkDb:
         else:
             table = WorkDb.MODE_CHECK[mode]
             column = self.dict_check[mode]
-            sql_query = self.__format_check_query(value, table, column, mode, mode="read")
+            if mode == 'type':
+                select_filter = ['type_title', 'type_number']
+            else:
+                select_filter = mode
+            sql_query = self.__format_check_query(value, table, column, select_filter, mode="read")
             sql_executable_data = self.__get_data_from_db(sql_query)
             id = sql_executable_data[0][0]
 
@@ -251,7 +309,7 @@ class WorkDb:
         """
         return dict_filter['serial_si'], dict_filter['name_si'], dict_filter['verif_year'], dict_filter['type_si']
 
-    def __format_get_metrology_query(self, serial_si, name_si, verif_year, type_si):
+    def __format_get_metrology_query(self, serial_si, name_si, verif_year, type_si, mode="only_si"):
         """
         Форматируем и формируем строку запроса в БД,
         для получения данных по СИ
@@ -259,9 +317,18 @@ class WorkDb:
         :param name_si: наименование СИ
         :param verif_year: год поверки СИ
         :param type_si: тип СИ
+        :param mode: режим формирования запроса: only_si - поиск только по номеру СИ,
+                                                type_si - поиск в том числе и по типу СИ.
         :return: строка SQL-запроса
         """
-        pass
+        sql_query = None
+        match mode:
+            case 'only_si':
+                sql_query = self.lst_sql_scripts_metrology[0].format(serial_si)
+            case 'type_si':
+                sql_query = self.lst_sql_scripts_metrology[1].format(serial_si, type_si)
+
+        return sql_query
 
     def get_card_for_si(self, dict_filter):
         """
@@ -270,6 +337,69 @@ class WorkDb:
         :return: список карточек по найденным совпадениям
         """
         serial_si, name_si, verif_year, type_si = self.__parse_dict_filter_for_card(dict_filter)
+        sql_query = self.__format_get_metrology_query(serial_si=serial_si,
+                                                      name_si=name_si,
+                                                      verif_year=verif_year,
+                                                      type_si=type_si,
+                                                      mode='type_si')
+        data_from_metrology = self.__get_data_from_db(sql_query)
+        output_data_metrology.info(f"Данные по СИ: {serial_si}, {type_si}, {verif_year}\n{data_from_metrology}")
+        if len(data_from_metrology) == 1:
+            current_card = CardFgis(data_from_metrology[0])
+            return current_card
+        elif len(data_from_metrology) == 0:
+            logger.info(f"Для текущего СИ {serial_si} не найдено ни одного значения, уточните параметры поиска.")
+        else:
+            lst_card = [CardFgis(item) for item in data_from_metrology]
+            # current_card = self.__parse_fgis_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
+            return lst_card
+
+    def check_tbmetrology_value(self, value):
+        """
+        Метод для проверки значения в таблице tbmetrology
+        :param value: словарь с данными
+        :return: True или False
+        """
+        sql_query = (f"""select tt1.type_number, tmod.modification, tm.si_number, tm.valid_date, tm.docnum, tt1.type_title, tt.title, org.name_org, tm.applicability, tm.vri_id, tm.verif_date
+                        from tbmetrology tm, tbtitle tt, tbtype tt1, tbmodification tmod, tborgmetrology org
+                        where (tm.mitnumber = tt1.id_type and tt1.type_title = '{value['mitype']}' and tt1.type_number = '{value['mitnumber']}' and tm.mitype = tt1.id_type) and 
+                        (tm.modification = tmod.id_mod and tmod.modification = '{value['modification']}') and 
+                        (tm.title = tt.id_title and tt.title = '{value['title']}') and
+                        (tm.org_title = org.id_org and org.name_org = '{value['org_title']}') and
+                        tm.si_number like '{value['si_number']}';""")
+        out_res = self.__get_data_from_db(sql_query)
+
+        return True if len(out_res) > 0 else False
+
+    def __parse_fgis_card(self, lst_cards, type_si, verif_date):
+        """
+        Метод для парсинга списка CardFgis
+        :param lst_cards:
+        :return: Объект CardFgis, или None - если не найдено однозначного
+                соответствия.
+        """
+        date = verif_date.date()
+        for card in lst_cards:
+            current_type = card.mi_mitype
+            current_verif_date = card.verification_date
+            current_mod = card.mi_modification
+            # dict_type_si = self.__parse_type_si(type_si)
+
+
+
+    # def __parse_type_si(self, current_type_si):
+    #     """
+    #     Метод для парсинга строки типа СИ, для корректного поиска в БД
+    #     :param current_type_si:
+    #     :return: dictionary
+    #     """
+    #     SEP_CHAR = [" ", "-", "/"]
+    #     # space_lst_types = current_type_si.split(sep=" ")
+    #     # tire_lst_types = current_type_si.split(sep="-")
+    #     # slesh_lst_types = current_type_si.split(sep="/")
+    #
+    #     dict_type_si = {sep: current_type_si.split(sep=sep) if len(current_type_si.split(sep=sep) > 1 else None) for sep in SEP_CHAR}
+    #     return dict_type_si
 
 
 class CardFgis:
@@ -283,7 +413,7 @@ class CardFgis:
         5. result_docnum - серия и номер свидетельства о поверки СИ;
         6. mi_mitype - тип СИ;
         7. mi_mititle - наименование СИ;
-        8. org_title - органицазия поверитель;
+        8. org_title - организация поверитель;
         9. applicability - флаг пригодности СИ, пригоден, если True, непригоден, если False;
         10. vri_id - уникалный идентификатор СИ в БД ФГИС;
         11. verification_date - дата последней поверки по данным ФГИС;
@@ -291,18 +421,18 @@ class CardFgis:
     """
 
     def __init__(self, init_data: tuple):
-        self.IND_PROP = {'mi_mitnumber': 0,
-                    'mi_modification': 1,
-                    'mi_number': 2,
-                    'valid_date': 3,
-                    'result_docnum': 4,
-                    'mi_mitype': 5,
-                    'mi_mititle': 6,
-                    'org_title': 7,
-                    'applicability': 8,
-                    'vri_id': 9,
-                    'verification_date': 10,
-                    'href': 11}
+        self.IND_PROP = {'mi_mitnumber': 1,
+                    'mi_modification': 2,
+                    'mi_number': 3,
+                    'valid_date': 4,
+                    'result_docnum': 5,
+                    'mi_mitype': 6,
+                    'mi_mititle': 7,
+                    'org_title': 8,
+                    'applicability': 9,
+                    'vri_id': 10,
+                    'verification_date': 11,
+                    'href': 12}
         self.__card = init_data
 
     @property
@@ -311,7 +441,7 @@ class CardFgis:
         Возвращаем регистрационный номер типа СИ
         :return: регистрационный номер типа СИ
         """
-        return self.__card[0]
+        return self.__card[self.IND_PROP['mi_mitnumber']]
 
     @property
     def mi_modification(self):
@@ -319,7 +449,7 @@ class CardFgis:
         Модификация типа СИ
         :return: модификация типа СИ
         """
-        return self.__card[1]
+        return self.__card[self.IND_PROP['mi_modification']]
 
     @property
     def mi_number(self):
@@ -327,7 +457,7 @@ class CardFgis:
         Заводской номер СИ
         :return: заводской номер СИ
         """
-        return self.__card[2]
+        return self.__card[self.IND_PROP['mi_number']]
 
     @property
     def valid_date(self):
@@ -335,7 +465,7 @@ class CardFgis:
         Дата следующей поверки
         :return: дата следующей поверки
         """
-        return self.__card[3]
+        return self.__card[self.IND_PROP['valid_date']]
 
     @property
     def result_docnum(self):
@@ -343,7 +473,7 @@ class CardFgis:
         Серия и номер свидетельства о поверке
         :return: номер свидетельства о поверке
         """
-        return self.__card[4]
+        return self.__card[self.IND_PROP['result_docnum']]
 
     @property
     def mi_mitype(self):
@@ -351,7 +481,7 @@ class CardFgis:
         Тип СИ
         :return: тип СИ
         """
-        return self.__card[5]
+        return self.__card[self.IND_PROP['mi_mitype']]
 
     @property
     def mi_mititle(self):
@@ -359,7 +489,7 @@ class CardFgis:
         Наименование СИ
         :return: наименование СИ
         """
-        return self.__card[6]
+        return self.__card[self.IND_PROP['mi_mititle']]
 
     @property
     def org_title(self):
@@ -367,7 +497,7 @@ class CardFgis:
         Организация-поверитель
         :return: наименование организации-поверителя
         """
-        return self.__card[7]
+        return self.__card[self.IND_PROP['org_title']]
 
     @property
     def applicability(self):
@@ -375,7 +505,7 @@ class CardFgis:
         Флаг пригодности к измерениям
         :return: False или True
         """
-        return self.__card[8]
+        return self.__card[self.IND_PROP['applicability']]
 
     @property
     def vri_id(self):
@@ -383,7 +513,7 @@ class CardFgis:
         Уникальный идентификатор в БД ФГИС
         :return: идентификатор
         """
-        return self.__card[9]
+        return self.__card[self.IND_PROP['vri_id']]
 
     @property
     def verification_date(self):
@@ -391,7 +521,7 @@ class CardFgis:
         Дата последней поверки
         :return: дата последней поверки из БД ФГИС
         """
-        return self.__card[10]
+        return self.__card[self.IND_PROP['verification_date']]
 
     @property
     def href(self):
@@ -399,7 +529,7 @@ class CardFgis:
         Ссылка на карточку СИ
         :return: ссылка
         """
-        return self.__card[11]
+        return self.__card[self.IND_PROP['href']]
 
 
 def main():

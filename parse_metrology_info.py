@@ -599,7 +599,6 @@ def main():
     def set_href(card, coord, str_verif_date, worksheet):
         """
         Функция для записи гиперссылки по СИ в ячейку
-        (переделать под использование класса XlsxFile)
 
         :param card: объект CardFgis с информацией по СИ
         :param coord: кортеж с коордиинатами ячейки для записи
@@ -617,31 +616,18 @@ def main():
             if date_verif_current_row == date_current_card:
                 href = card.href
 
-                if not xlsx.check_merged(worksheet, coord):
-
-                    # xlsx.unmerge(worksheet, (coord[0] - 1, coord[1], coord[0] + 1, coord[1]))
-
-                    worksheet.cell(row=coord[0], column=coord[1]).hyperlink = href
-                    worksheet.cell(row=coord[0], column=coord[1]).value = 'ФГИС'
-                    worksheet.cell(row=coord[0], column=coord[1]).style = "Hyperlink"
-                    xlsx.set_fill(worksheet, coord, 'green')
-                    # worksheet.cell(row=coord[0], column=coord[1]).fill = Fill
-                    logger.info(f"Записана ссылка в ячейку row={coord[0]}, column={coord[1]}")
+                if not workbook.check_merged(coord):
+                    workbook.set_href(coord, href)
+                    workbook.set_fill(coord, 'green')
                     return True
             else:
                 href = card.href
-                worksheet.cell(row=coord[0], column=coord[1]).hyperlink = href
-                worksheet.cell(row=coord[0], column=coord[1]).value = f"ФГИС"
-                worksheet.cell(row=coord[0], column=coord[1]).style = "Hyperlink"
-                xlsx.set_fill(worksheet, coord, 'red')
-                # worksheet.cell(row=r, column=href_col).fill = FillRed
-                worksheet.cell(row=coord[0], column=(coord[1] - 2)).value = card.verification_date
-                # worksheet.cell(row=coord[0], column=(coord[1] - 1)).value = card.valid_date
+                workbook.set_href(coord, href)
+                workbook.set_fill(coord, 'red')
+                workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
                 return False
         else:
-            # worksheet.cell(row=r, column=href_col).value = 'Нет ссылки'
-            xlsx.set_fill(worksheet, coord, 'blue')
-            # worksheet.cell(row=r, column=href_col).fill = FillBlue
+            workbook.set_fill(coord, 'blue')
             return False
 
     def prepare_and_write(response: list, row_number: int=0):

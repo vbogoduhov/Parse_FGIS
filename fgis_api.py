@@ -23,7 +23,7 @@ headers = {
     'Sec-Fetch-User': '?1',
 }
 
-logger = app_logger.get_logger('fgis_api')
+logger = app_logger.get_logger('fgis_api', 'fgis_log.log')
 
 def request_fgis(dict_params: dict):
     """
@@ -34,11 +34,19 @@ def request_fgis(dict_params: dict):
     logger.info(f"Попытка запроса <{url_for_request}>")
     result_items = []
     count_req = 0
+    count_err = 0
     while True:
-        if count_req > 10:
+        if count_req > 15:
             logger.warning(f"Получение данных по запросу <{url_for_request}> прервано из-за превышения допустимого количества попыток")
             break
-        response = requests.get(url_for_request, cookies=cookies, headers=headers)
+        if count_err > 15:
+            logger.warning(f"Подключение прервано из-за таймаунта соединения.")
+            break
+        try:
+            response = requests.get(url_for_request, cookies=cookies, headers=headers)
+        except requests.exceptions.ConnectTimeout:
+            count_err += 1
+            continue
         if response.status_code == 200:
             logger.info(f"Запрос <{url_for_request}> успешно выполнен")
             response_json = response.json()
@@ -59,8 +67,6 @@ def request_fgis(dict_params: dict):
 
     return result_items
 
-
-
 def parse_response(result_response):
     """
     Обработка результата запроса
@@ -72,8 +78,7 @@ def parse_response(result_response):
 
     return items
 
-
-def format_url(d_params: dict, start=0):
+def format_url(d_params: dict, start: int=0):
     """
     Форматирование строки url с использованием
     переданных параметров для запроса
@@ -88,7 +93,6 @@ def format_url(d_params: dict, start=0):
     url = f"http://fgis.gost.ru/fundmetrology/eapi/vri?year={verif_year}&search={title}{mi_type}{mi_number}&start={start}&rows={rows}"
 
     return url
-
 
 def main():
     pass

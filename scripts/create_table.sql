@@ -16,4 +16,3 @@ create table if not exists tbmetrology
 	vri_id text,
 	verif_date text,
 	href text);
-	

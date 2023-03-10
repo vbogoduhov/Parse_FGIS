@@ -11,10 +11,10 @@ import argparse
 import re
 import app_logger
 import parse_fgis
-from work_db import WorkDb
+from work_db import WorkDb, CardFgis
 from parse_type_si import TypeParseSi
 
-logger = app_logger.get_logger(__name__)
+logger = app_logger.get_logger(__name__, 'log_file.log')
 # Константы
 # ================== #
 
@@ -71,7 +71,7 @@ def create_parse_arg():
                         help='Имя файла Excel')
     parser.add_argument('-y', '--years', type=int, default=datetime.today().year,
                         help='Год поверки СИ для выборки')
-    parser.add_argument('-k', '--keyword', type=str, default='ТТ', help="СИ по которому нужно получить данные из ФГИС: "
+    parser.add_argument('-k', '--keyword', type=str, default='ПУ', help="СИ по которому нужно получить данные из ФГИС: "
                                                                               "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения.")
     parser.add_argument('-m', '--mode', type=str, default='fgis', help="Режим запуска скрипта: fgis - для сбора данных из БД ФГИС,"
                                                                         "local - для локальной работы и заполнения файла Excel,"
@@ -111,7 +111,7 @@ def get_verif_year_from_str(str_verif_year):
         if type(str_verif_year) == datetime:
             verif_year = str_verif_year.date().year
         elif type(str_verif_year) == str:
-            tmp_datetime = datetime.strptime(str_verif_year, "&d.%m.%Y")
+            tmp_datetime = datetime.strptime(str_verif_year, "%d.%m.%Y")
             verif_year = tmp_datetime.date().year
         print(f"Год поверки для текущего СИ - {verif_year}")
         logger.info(f"Год поверки для текущего СИ - {verif_year}")
@@ -131,7 +131,7 @@ def format_dict_requests(title="", verif_year=datetime.today().year, mitype=None
     :return: dict_requests - сформированный словарь для запроса
     """
     if title == "ПУ":
-        filter_mititle = "Счётчик*электрической*%20"
+        filter_mititle = "Счетчик*электрической*%20"
     elif title == "ТТ":
         filter_mititle = "Трансформаторы*тока*%20"
     elif title == "ТН":
@@ -147,8 +147,10 @@ def format_dict_requests(title="", verif_year=datetime.today().year, mitype=None
 
     return dict_request
 
+
 def change_serial_number(serial: str):
     pass
+
 
 def get_parse_si(si_for_parse: str, verif_year, mode, namefile='', serial=''):
     """
@@ -187,8 +189,9 @@ def get_parse_si(si_for_parse: str, verif_year, mode, namefile='', serial=''):
             for r in range(START_ROW, end_row + 1):
                 if si == "ПУ":
                     serial = str(worksheet.cell(row=r, column=number_col).value)
-                    if serial[:2] == "12":
-                        worksheet.cell(row=r, column=number_col).value = '0' + serial
+                    logger.info(f"Строка №{r}, серийный номер: {serial}")
+                    if serial[:2] == "'0":
+                        worksheet.cell(row=r, column=number_col).value = serial[1:]
                 print(f"Строка №{r} файла Excel.")
                 str_verif_date = worksheet.cell(row=r, column=verif_date_col).value
                 logger.info(f"Дата последней поверки текущей строки - {str_verif_date}")
@@ -221,10 +224,11 @@ def get_parse_si(si_for_parse: str, verif_year, mode, namefile='', serial=''):
                                 if type(local_request) == list:
                                     worksheet.cell(row=r, column=href_col).value = f"Проверить в ручном режиме. Найдено {len(local_request)} значения(й)"
                                     worksheet.cell(row=r, column=href_col).fill = FillYellow
-                                    # for lst in local_request:
-                                    #     if set_href(Fill, FillRed, href_col, lst, r, str_verif_date, worksheet):
-                                    #         logger.info(f"Ссылка для СИ {lst.mi_number} найдена.")
-                                    #         break
+                                    for lst in local_request:
+                                        if check_verif_date(lst, str_verif_date):
+                                            if set_href(Fill, FillRed, href_col, lst, r, str_verif_date, worksheet):
+                                                logger.info(f"Ссылка для СИ {lst.mi_number} найдена.")
+                                                break
                                 else:
                                     if set_href(Fill, FillRed, FillBlue, href_col, local_request, r, str_verif_date, worksheet):
                                         logger.info(f"Ссылка для СИ {local_request.mi_number} найдена.")
@@ -236,16 +240,35 @@ def get_parse_si(si_for_parse: str, verif_year, mode, namefile='', serial=''):
                     pass
     workbook.save(namefile)
 
+
+def check_verif_date(card: CardFgis, last_verif_date: str):
+
+    card_last_verif_date = card.verification_date
+    if type(last_verif_date) == str:
+        tmp_verif_date = datetime.strptime(last_verif_date, "%d.%m.%Y")
+    else:
+        tmp_verif_date = last_verif_date
+
+    if card_last_verif_date == tmp_verif_date:
+        return True
+    else:
+        return False
+
+
 def parse_type(mitype):
     lst = re.split(r'[- .,]', mitype)
     return lst
+
 
 def set_href(Fill, FillRed, FillBlue, href_col, local_request, r, str_verif_date, worksheet):
 
     if not local_request == None:
         verif_date_current_card = datetime.strptime(local_request.verification_date, "%d.%m.%Y")
         date_current_card = verif_date_current_card.date()
-        date_verif_current_row = str_verif_date.date()
+        if type(str_verif_date) == datetime:
+            date_verif_current_row = str_verif_date.date()
+        elif type(str_verif_date) == str:
+            date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
         if date_verif_current_row == date_current_card:
             href = get_href(local_request)
             worksheet.cell(row=r, column=href_col).hyperlink = href
@@ -257,17 +280,17 @@ def set_href(Fill, FillRed, FillBlue, href_col, local_request, r, str_verif_date
         else:
             href = get_href(local_request)
             worksheet.cell(row=r, column=href_col).hyperlink = href
-            worksheet.cell(row=r, column=href_col).value = f"ПРОВЕРИТЬ КОРРЕКТНОСТЬ, поверка во ФГИС: {verif_date_current_card}"
+            worksheet.cell(row=r, column=href_col).value = f"ФГИС информация о поверке"
             worksheet.cell(row=r, column=href_col).style = "Hyperlink"
             worksheet.cell(row=r, column=href_col).fill = FillRed
+            worksheet.cell(row=r, column=(href_col-2)).value = local_request.verification_date
+            worksheet.cell(row=r, column=(href_col-1)).value = local_request.valid_date
             return False
     else:
         # worksheet.cell(row=r, column=href_col).value = 'Нет ссылки'
         worksheet.cell(row=r, column=href_col).fill = FillBlue
         return False
 
-def get_index_card(lst_card, vefir_date):
-    pass
 
 def request_fgis(current_serial, si, verif_year, mitype, year):
     """
@@ -288,6 +311,7 @@ def request_fgis(current_serial, si, verif_year, mitype, year):
                                         rows=str(100))
     print(dict_request)
     parse_fgis.get_data_from_fgis(dict_request)
+
 
 def request_local(serial, si, year, current_type, verif_date):
     """

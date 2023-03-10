@@ -1,10 +1,9 @@
 import os.path
-
 import psycopg2 as psql
 import app_logger
 
-logger = app_logger.get_logger(__name__)
-output_data_metrology = app_logger.get_logger('Data_from_metrology')
+logger = app_logger.get_logger(__name__, 'workdb_log.log')
+output_data_metrology = app_logger.get_logger('Data_from_metrology', 'workdb_log.log')
 
 class WorkDb:
     MODE_CHECK = {'title': 'tbtitle',
@@ -195,7 +194,7 @@ class WorkDb:
         """
         Метод для проверки значения value
 
-        :param title: значение value для проверки
+        :param value: значение value для проверки
         :param mode: режим проверки, то есть что проверять,
                      значения и соответствующие таблицы БД в словаре MODE_CHECK,
                      класса WorkDb:
@@ -326,7 +325,7 @@ class WorkDb:
             case 'only_si':
                 sql_query = self.lst_sql_scripts_metrology[0].format(serial_si)
             case 'type_si':
-                sql_query = self.lst_sql_scripts_metrology[1].format(serial_si, type_si)
+                sql_query = self.lst_sql_scripts_metrology[1].format(serial_si, type_si, type_si)
 
         return sql_query
 

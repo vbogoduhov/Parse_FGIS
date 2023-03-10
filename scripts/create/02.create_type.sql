@@ -1,0 +1,17 @@
+CREATE TYPE card_si AS (
+	id int4,
+	type_number text,
+	modification text,
+	serial text,
+	valid_date text,
+	docnum text,
+	type_title text,
+	title text,
+	name_org text,
+	applicability text,
+	vri_id text,
+	verif_date text,
+	href text,
+	change_date date,
+	change_flag int4,
+	rows_number int4);

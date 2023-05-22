@@ -37,6 +37,7 @@ import re
 from parse_type_si import TypeParseSi
 from progress.bar import IncrementalBar
 import configparser
+
 # Конец блока импорта
 
 # Логгер
@@ -92,22 +93,25 @@ def parse_args():
     logger.info("Парсинг параметров командной строки")
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--serial', type=str, default='', help='Конкретный номер СИ для поиска в БД FGIS')
-    parser.add_argument('-n', '--namefile', type=str, default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г_last.xlsx",
+    parser.add_argument('-n', '--namefile', type=str,
+                        default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г_last.xlsx",
                         help='Имя файла Excel для обработки')
     parser.add_argument('-y', '--years', type=int, default=0,
                         help='Год поверки СИ для выборки')
-    parser.add_argument('-k', '--keyword', type=str, default='ПУ', help="СИ по которому нужно получить данные из ФГИС или локальной БД: "
-                                                                              "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения."
-                                                                              "Можно вводить несколько, в таком случае значения должны быть разделена пробелом,"
-                                                                              "например: <ТТ ТН> или <ТН ПУ ТТ>")
+    parser.add_argument('-k', '--keyword', type=str, default='ПУ',
+                        help="СИ по которому нужно получить данные из ФГИС или локальной БД: "
+                             "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения."
+                             "Можно вводить несколько, в таком случае значения должны быть разделена пробелом,"
+                             "например: <ТТ ТН> или <ТН ПУ ТТ>")
     parser.add_argument('-m', '--mode', type=str, default='fgis', help="Режим запуска скрипта: "
                                                                        "fgis - для сбора данных из БД ФГИС,"
-                                                                        "local - для локальной работы и заполнения файла Excel,"
+                                                                       "local - для локальной работы и заполнения файла Excel,"
                                                                        "unknow - когда неизвестен год последней поверки, и нужно проверить СИ"
-                                                                       "по годам, начиная с известного года последней поверки," 
+                                                                       "по годам, начиная с известного года последней поверки,"
                                                                        "change_serial - для добавления 0 вначале номера для ЕвроАльфа")
     parser.add_argument('--START', type=int, default=13, help='Начальная строка')
-    parser.add_argument('-cfg', '--setfile', type=str, default='settings.ini', help='Файл с настройками подключения к локальной БД')
+    parser.add_argument('-cfg', '--setfile', type=str, default='settings.ini',
+                        help='Файл с настройками подключения к локальной БД')
     logger.info("Парсинг параметров командной строки закончен")
 
     return parser
@@ -159,11 +163,14 @@ def format_dict_for_write(source_dict: dict, row_number: int):
     res_dict = {}
     href = "https://fgis.gost.ru/fundmetrology/cm/results/"
     res_dict['mitnumber'] = source_dict['mit_number'] if 'mit_number' in source_dict else "None"
-    res_dict['modification'] = source_dict['mi_modification'].encode().decode('utf-8', 'ignore') if 'mi_modification' in source_dict else "None"
-    res_dict['si_number'] = source_dict['mi_number'].encode().decode('utf-8', 'ignore') if 'mi_number' in source_dict else "None"
+    res_dict['modification'] = source_dict['mi_modification'].encode().decode('utf-8',
+                                                                              'ignore') if 'mi_modification' in source_dict else "None"
+    res_dict['si_number'] = source_dict['mi_number'].encode().decode('utf-8',
+                                                                     'ignore') if 'mi_number' in source_dict else "None"
     res_dict['valid_date'] = source_dict['valid_date'] if 'valid_date' in source_dict else "None"
     res_dict['docnum'] = source_dict['result_docnum'] if 'result_docnum' in source_dict else "None"
-    res_dict['mitype'] = source_dict['mit_notation'].encode().decode('utf-8', 'ignore') if 'mit_notation' in source_dict else "None"
+    res_dict['mitype'] = source_dict['mit_notation'].encode().decode('utf-8',
+                                                                     'ignore') if 'mit_notation' in source_dict else "None"
     res_dict['title'] = source_dict['mit_title'] if 'mit_title' in source_dict else "None"
     res_dict['org_title'] = source_dict['org_title'] if 'org_title' in source_dict else "None"
     res_dict['applicability'] = source_dict['applicability'] if 'applicability' in source_dict else "None"
@@ -384,7 +391,7 @@ def main():
     start = namespace_argv.START
     namefile_setting = namespace_argv.setfile
 
-    #=========================================================================================#
+    # =========================================================================================#
 
     # Читаем файл с параметрами подключения к локальной БД
     local_db_parameters = read_settings_file(namefile_setting)
@@ -395,14 +402,15 @@ def main():
                               port=local_db_parameters['port'],
                               host=local_db_parameters['host'])
 
-    #==========================================================================================#
+    # ==========================================================================================#
 
     # Проверяем введённые параметры на корректность,
     # недопустим режим unknow и год 0
     if verif_year != 0 and mode == 'unknow':
         print(f"Заданы некорректные параметры запуска: при использовании режима 'unknow' не нужно задавать год."
               f"Прекращаем работу...")
-        logger.warning(f"Заданы некорректные параметры запуска: mode = {mode}, verif_year = {verif_year}.\nПрекращаем работу.")
+        logger.warning(
+            f"Заданы некорректные параметры запуска: mode = {mode}, verif_year = {verif_year}.\nПрекращаем работу.")
         sys.exit()
     if verif_year == 0 and (mode in ['fgis', 'local']):
         joke_answer = input(f"Вы не задали год для обработки, но при этом выбрали режим {mode}."
@@ -417,7 +425,6 @@ def main():
         START_ROW = start
     else:
         pass
-
 
     logger.info(f"Парсим файл Excel со следующими исходными данными: имя файла - {namefile_xlsx}, "
                 f"год поверки - {verif_year}, СИ для парсинга - {keyword_si}")
@@ -531,7 +538,6 @@ def main():
             #  - сформировать списко карточек в которых дата поверки совпадает, если таких больше одной
             #  - проверить эти карточки по идентификаторам
 
-
             d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
             if len(d) == 1:
                 res_lst_card = d[list(d.keys())[0]]
@@ -630,7 +636,7 @@ def main():
             workbook.set_fill(coord, 'blue')
             return False
 
-    def prepare_and_write(response: list, row_number: int=0):
+    def prepare_and_write(response: list, row_number: int = 0):
         """
         Функция для подготовки к записи в локальную БД данных,
         полученных из ФГИС.
@@ -654,9 +660,9 @@ def main():
                             f"Не удалось записать данные в БД <{str(dict_for_write)}>")
         logger.info(f"Обработан СИ с номером - {current_serial}")
 
-    #=============================================================================#
+    # =============================================================================#
     # Функции по режимам работы (добавить), пока не вводить в строй
-    def work_on_fgis():
+    def work_on_fgis(last_verif_year: int, si_for_fgis: str, namefile: str, start_row: int):
         """
         Функция работает при выборе режима работы скрипта 'fgis'
         С параметрами тоже определиться
@@ -665,7 +671,7 @@ def main():
         """
         print("Отработала функция work_on_fgis")
 
-    def work_on_local():
+    def work_on_local(last_verif_year: int, si_for_local: str, namefile: str, start_row: int):
         """
         Функция работает при выборе режима работы скрипта 'local'
         С параметрами определиться
@@ -691,22 +697,24 @@ def main():
         :return:
         """
         print("Отработала функция work_on_change_serial")
-    #=============================================================================#
+
+    # =============================================================================#
     match mode:
         case 'fgis':
             print(f"Запуск work_on_fgis для редима работы {mode}")
-            work_on_fgis()
+            # work_on_fgis()
         case 'local':
             print(f"Запуск work_on_local для режима работы {mode}")
-            work_on_local()
+            # work_on_local()
         case 'unknow':
             print(f"Запуск work_on_unknowledge для режима работы {mode}")
-            work_in_unknowledge()
+            # work_in_unknowledge()
         case 'change_serial':
             print(f"Запуск work_on_change_serial для режима работы {mode}")
-            work_on_change_serial()
+            # work_on_change_serial()
     # ============================================================================#
-    bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (1 * len(keyword_si.split(sep=" "))))
+    bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (
+                1 * len(keyword_si.split(sep=" "))))
 
     # Основной цикл прохода по введённым СИ
     for current_si in keyword_si.split(sep=" "):
@@ -766,14 +774,15 @@ def main():
                 match mode:
                     case 'fgis':
                         if serial != '' and serial != current_serial:
-                            logger.info(f"Задан конкретный номер СИ для поиска - {serial}. Текущий номер СИ - {current_serial}"
-                                        f" не совпадает с введённым, пропускаем его.")
+                            logger.info(
+                                f"Задан конкретный номер СИ для поиска - {serial}. Текущий номер СИ - {current_serial}"
+                                f" не совпадает с введённым, пропускаем его.")
                         else:
                             logger.info(f"Готовим запрос в БД ФГИС по СИ - {current_si}, №{current_serial}")
                             response = fgis_request({'current_si': current_si,
-                                          'current_serial': current_serial,
-                                          'last_verif_year': last_verif_year,
-                                          'mitype': mitype})
+                                                     'current_serial': current_serial,
+                                                     'last_verif_year': last_verif_year,
+                                                     'mitype': mitype})
                             # Проверяем результаты запроса, получено ли вообще что-нибудь
                             # Если количество элементов списка в ответе больше 0, то есть
                             # что-то получили
@@ -793,7 +802,8 @@ def main():
                             # ...
                             # ...
                             # ...
-                            res_local_request = local_request(current_serial, current_si, last_verif_year, mitype, str_verif_date)
+                            res_local_request = local_request(current_serial, current_si, last_verif_year, mitype,
+                                                              str_verif_date)
                             check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
                         else:
                             # Проверить валидность гиперссылки для начала
@@ -816,7 +826,7 @@ def main():
                         if str(current_serial)[0] == '0':
                             continue
                         elif str(current_serial)[0] == '1':
-                            current_serial = '0'+str(current_serial)
+                            current_serial = '0' + str(current_serial)
                             workbook._write_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
             else:
                 logger.info(f"Пропускаем строку {current_row}, так как не совпадает год.")

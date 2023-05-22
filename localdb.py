@@ -14,6 +14,7 @@ import app_logger
 logger = app_logger.get_logger(__name__, 'localdb_log.log')
 output_data_metrology = app_logger.get_logger('Data_from_metrology', 'localdb_log.log')
 
+
 class WorkDb:
     MODE_CHECK = {'title': 'tbtitle',
                   'modification': 'tbmodification',
@@ -246,10 +247,10 @@ class WorkDb:
         """
         try:
             connect = psql.connect(database=self.database,
-                                user=self.user,
-                                password=self.password,
-                                host=self.host,
-                                port=self.port)
+                                   user=self.user,
+                                   password=self.password,
+                                   host=self.host,
+                                   port=self.port)
             return connect
         except ConnectionError:
             logger.warning(f"Не удаётся установить соединение с БД")
@@ -266,7 +267,7 @@ class WorkDb:
         else:
             logger.warning(f"Не удалось получить объект cursor(), так как соединение с БД не было установлено")
 
-    def check_value(self, value: tuple, mode: str=""):
+    def check_value(self, value: tuple, mode: str = ""):
         """
         Метод для проверки значения value
 
@@ -662,7 +663,7 @@ class WorkDb:
         """
         sql_query = f"select get_id_for_href('{href}')"
         try:
-            return  self.__get_data_from_db(sql_query)[0][0]
+            return self.__get_data_from_db(sql_query)[0][0]
         except:
             logger.warning(f"Не удалось получить идентификатор записи для гиперссылки: {href}")
 
@@ -746,7 +747,6 @@ class WorkDb:
         return result_lst
 
 
-
 class CardFgis:
     """
     Класс, описывающий структуру данных - карточек ФГИС
@@ -770,21 +770,21 @@ class CardFgis:
 
     def __init__(self, init_data: tuple):
         self.IND_PROP = {'id': 0,
-                    'mi_mitnumber': 1,
-                    'mi_modification': 2,
-                    'mi_number': 3,
-                    'valid_date': 4,
-                    'result_docnum': 5,
-                    'mi_mitype': 6,
-                    'mi_mititle': 7,
-                    'org_title': 8,
-                    'applicability': 9,
-                    'vri_id': 10,
-                    'verification_date': 11,
-                    'href': 12,
-                    'change_date': 13,
-                    'change_flag': 14,
-                    'number_rows': 15}
+                         'mi_mitnumber': 1,
+                         'mi_modification': 2,
+                         'mi_number': 3,
+                         'valid_date': 4,
+                         'result_docnum': 5,
+                         'mi_mitype': 6,
+                         'mi_mititle': 7,
+                         'org_title': 8,
+                         'applicability': 9,
+                         'vri_id': 10,
+                         'verification_date': 11,
+                         'href': 12,
+                         'change_date': 13,
+                         'change_flag': 14,
+                         'number_rows': 15}
         self.__card = init_data
 
     @property
@@ -923,22 +923,23 @@ class CardFgis:
         :return: True or False
         """
         if (self.mi_mitnumber == other_card.mi_mitnumber and
-            self.mi_modification == other_card.mi_modification and
-            self.result_docnum[:self.result_docnum.rfind('/')] == other_card.result_docnum[:other_card.result_docnum.rfind('/')] and
-            self.mi_mitype == other_card.mi_mitype and
-            self.mi_mititle == other_card.mi_mititle and
-            self.org_title == other_card.org_title and
-            self.verification_date == other_card.verification_date):
+                self.mi_modification == other_card.mi_modification and
+                self.result_docnum[:self.result_docnum.rfind('/')] == other_card.result_docnum[
+                                                                      :other_card.result_docnum.rfind('/')] and
+                self.mi_mitype == other_card.mi_mitype and
+                self.mi_mititle == other_card.mi_mititle and
+                self.org_title == other_card.org_title and
+                self.verification_date == other_card.verification_date):
             return True
         else:
             return False
-
 
 
 def main():
     db = WorkDb()
     tables = db.tables
     print(tables)
+
 
 if __name__ == "__main__":
     main()

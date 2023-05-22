@@ -10,6 +10,7 @@ from openpyxl.styles import PatternFill, Alignment, Font, Protection
 import app_logger
 from datetime import datetime, date
 import re
+
 # Конец блока импорта
 
 logger = app_logger.get_logger(__name__, 'xlsx_log.log')
@@ -64,6 +65,7 @@ EXC_STR = ['',
            'отсутствует',
            None]
 
+
 def open_file(filename: str):
     """
     Метод для открытия файла. Возвращает объект книги.
@@ -71,10 +73,11 @@ def open_file(filename: str):
     :return: объект workbook
     """
     try:
-        workbook = openpyxl.load_workbook(filename,data_only=True)
+        workbook = openpyxl.load_workbook(filename, data_only=True)
         return workbook
     except Exception as err:
         logger.warning(f"Не удалось открыть файл {filename}. Ошибка - {err.__str__()}")
+
 
 def get_worksheet(workbook: openpyxl.workbook.workbook.Workbook, namesheet: str):
     """
@@ -88,6 +91,7 @@ def get_worksheet(workbook: openpyxl.workbook.workbook.Workbook, namesheet: str)
     else:
         logger.warning(f"Невозможно получить объект sheet для типа {type(workbook)}")
 
+
 def set_fill(worksheet: openpyxl.worksheet.worksheet.Worksheet, cells: tuple, color: str):
     """
     Метод для заливки ячейки цветом.
@@ -98,6 +102,7 @@ def set_fill(worksheet: openpyxl.worksheet.worksheet.Worksheet, cells: tuple, co
     """
     worksheet.cell(row=cells[0], column=cells[1]).fill = COLORS[color]
     logger.info(f"Ячейка с координатами ({cells[0]}, {cells[1]}) залита цветом {color}")
+
 
 def unmerge(worksheet: openpyxl.worksheet.worksheet.Worksheet, coord: tuple):
     """
@@ -114,6 +119,7 @@ def unmerge(worksheet: openpyxl.worksheet.worksheet.Worksheet, coord: tuple):
                             end_row=coord[2],
                             end_column=coord[3])
 
+
 def check_merged(worksheet: openpyxl.worksheet.worksheet.Worksheet, coord: tuple):
     """
     Проверка диапазона ячеек на объединение
@@ -125,6 +131,7 @@ def check_merged(worksheet: openpyxl.worksheet.worksheet.Worksheet, coord: tuple
         return True
     else:
         return False
+
 
 def save(workbook: openpyxl.workbook.workbook.Workbook, namefile: str):
     """
@@ -139,6 +146,7 @@ def save(workbook: openpyxl.workbook.workbook.Workbook, namefile: str):
         logger.info(f"Файл {namefile} сохранён и закрыт.")
     except Exception as err:
         logger.warning(f"Не удалось сохранить и закрыть файл {namefile}. Ошибка <{err.__str__()}>")
+
 
 def merge(worksheet: openpyxl.worksheet.worksheet.Worksheet, coord: tuple):
     """
@@ -226,7 +234,6 @@ class XlsxFile:
 
     COLUMN_ID = 36
 
-    
     def __init__(self, namefile: str):
         """
         Конструктор класса
@@ -242,15 +249,15 @@ class XlsxFile:
         """
         self._file = openpyxl.load_workbook(self.namefile, data_only=True)
         self.active_sheet = self._file[XlsxFile.SHEETNAME]
-        
+
     @property
     def max_row(self):
         return self.active_sheet.max_row
-    
+
     @property
     def worksheets(self):
         return self._file.worksheets
-    
+
     @property
     def mereged_range(self):
         return self.active_sheet.merged_cells
@@ -427,7 +434,7 @@ class XlsxFile:
         self.active_sheet.cell(coord[0], coord[1]).hyperlink = href
         logger.info(f"В ячейку с координатами <{coord}> добавлена гиперссылка {href}")
 
-    def set_alignment(self, coord: tuple, align_style: str="center"):
+    def set_alignment(self, coord: tuple, align_style: str = "center"):
         """
         Метод для установки стиля выравнивания ячейки
 
@@ -542,7 +549,6 @@ class XlsxFile:
         else:
             flag_href_style = False
             href_value = None
-
 
         inform_si = {'serial': serial,
                      'type': type,

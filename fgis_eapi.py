@@ -32,6 +32,7 @@ headers = {
 
 logger = app_logger.get_logger('fgis_api', 'fgis_log.log')
 
+
 def request_fgis(dict_params: dict):
     """
     Запрос в БД ФГИС
@@ -45,7 +46,8 @@ def request_fgis(dict_params: dict):
     count_err = 0
     while True:
         if count_req > 15:
-            logger.warning(f"Получение данных по запросу <{url_for_request}> прервано из-за превышения допустимого количества попыток")
+            logger.warning(
+                f"Получение данных по запросу <{url_for_request}> прервано из-за превышения допустимого количества попыток")
             break
         if count_err > 15:
             logger.warning(f"Подключение прервано из-за таймаунта соединения.")
@@ -66,14 +68,17 @@ def request_fgis(dict_params: dict):
             elif count_items == 0:
                 logger.info(f"По запросу <{url_for_request}> данных не получено")
             else:
-                logger.warning(f"По запросу <{url_for_request}> получено результатов, более {dict_params['rows']}. Прекращаем обработку")
+                logger.warning(
+                    f"По запросу <{url_for_request}> получено результатов, более {dict_params['rows']}. Прекращаем обработку")
             break
         else:
-            logger.warning(f"По запросу <{url_for_request}> не получено ответа от сервера. Код ответа: {response.status_code}, {response.text}")
+            logger.warning(
+                f"По запросу <{url_for_request}> не получено ответа от сервера. Код ответа: {response.status_code}, {response.text}")
             time.sleep(2)
             count_req += 1
 
     return result_items
+
 
 def parse_response(result_response):
     """
@@ -86,7 +91,8 @@ def parse_response(result_response):
 
     return items
 
-def format_url(d_params: dict, start: int=0):
+
+def format_url(d_params: dict, start: int = 0):
     """
     Форматирование строки url с использованием
     переданных параметров для запроса
@@ -97,11 +103,12 @@ def format_url(d_params: dict, start: int=0):
     title = d_params['filter_mititle']
     verif_year = d_params['verification_year']
     mi_number = d_params['filter_minumber']
-    mi_type = d_params['filter_mitype']+'*%20'
+    mi_type = d_params['filter_mitype'] + '*%20'
     rows = d_params['rows']
     url = f"http://fgis.gost.ru/fundmetrology/eapi/vri?year={verif_year}&search={title}{mi_type}{mi_number}&start={start}&rows={rows}"
 
     return url
+
 
 def get_argv():
     parser = argparse.ArgumentParser()
@@ -111,6 +118,7 @@ def get_argv():
     parser.add_argument('-ty', '--type', type=str, default='', help='Тип СИ')
     parser.add_argument('-r', '--rows', type=int, default=100, help='Количество строк')
     return parser
+
 
 def main():
     parser = get_argv()

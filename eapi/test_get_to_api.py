@@ -32,7 +32,7 @@ count_page = 100
 f_out = 'out_fgis.txt'
 with open(f_out, 'a', encoding='utf-8') as out_file:
     while True:
-        url = f"http://fgis.gost.ru/fundmetrology/eapi/vri?year=2021&search=Счетчики*электрической*%20Альфа*%2001202547&start=0&rows=100"
+        url = f"http://fgis.gost.ru/fundmetrology/eapi/vri?year=2023&search=Трансформаторы*тока*%203171040338&start=0&rows=100"
 
 
         response = requests.get(url, cookies=cookies, headers=headers)

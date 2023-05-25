@@ -94,16 +94,16 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--serial', type=str, default='', help='Конкретный номер СИ для поиска в БД FGIS')
     parser.add_argument('-n', '--namefile', type=str,
-                        default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г_last.xlsx",
+                        default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г.  итог 2 кв..xlsx",
                         help='Имя файла Excel для обработки')
     parser.add_argument('-y', '--years', type=int, default=0,
                         help='Год поверки СИ для выборки')
-    parser.add_argument('-k', '--keyword', type=str, default='ПУ',
+    parser.add_argument('-k', '--keyword', type=str, default='ТТ ТН',
                         help="СИ по которому нужно получить данные из ФГИС или локальной БД: "
                              "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения."
                              "Можно вводить несколько, в таком случае значения должны быть разделена пробелом,"
                              "например: <ТТ ТН> или <ТН ПУ ТТ>")
-    parser.add_argument('-m', '--mode', type=str, default='fgis', help="Режим запуска скрипта: "
+    parser.add_argument('-m', '--mode', type=str, default='unknow', help="Режим запуска скрипта: "
                                                                        "fgis - для сбора данных из БД ФГИС,"
                                                                        "local - для локальной работы и заполнения файла Excel,"
                                                                        "unknow - когда неизвестен год последней поверки, и нужно проверить СИ"
@@ -701,7 +701,7 @@ def main():
     # =============================================================================#
     match mode:
         case 'fgis':
-            print(f"Запуск work_on_fgis для редима работы {mode}")
+            print(f"Запуск work_on_fgis для режима работы {mode}")
             # work_on_fgis()
         case 'local':
             print(f"Запуск work_on_local для режима работы {mode}")
@@ -745,7 +745,13 @@ def main():
                 valid_year = None
             else:
                 last_verif_year = inform_si['verif_date'].year
-                valid_year = inform_si['valid_date'].year if type(inform_si['valid_date']) is datetime.date else None
+                # print(type(inform_si['valid_date']))
+                if type(inform_si['valid_date']) is date:
+                    valid_year = inform_si['valid_date'].year
+                else:
+                    # print(f"type: {type(inform_si['valid_date'])}, type_verif: {type(inform_si['verif_date'])}")
+                    # print(type(inform_si['valid_date']) == date)
+                    valid_year = None
 
             # Проверяем год для обработки из параметров скрипта
             # для дальнейших действий

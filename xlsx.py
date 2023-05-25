@@ -425,7 +425,7 @@ class XlsxFile:
 
     def set_hlink_style(self, coord: tuple, href: str):
         """
-        Метод для присвоения формата ячейке "гиперссылка"
+        Метод для присвоения ячейке формата "гиперссылка"
 
         :param coord: кортеж с координатами ячейки
         :return:

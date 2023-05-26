@@ -252,14 +252,29 @@ class XlsxFile:
 
     @property
     def max_row(self):
+        """
+        Свойство - значение последней используемой строки листа
+
+        :return: int - номер последней используемой строки книги
+        """
         return self.active_sheet.max_row
 
     @property
     def worksheets(self):
+        """
+        Свойство - возвращает список листов книги Excel
+
+        :return: List - список листов книги Excel
+        """
         return self._file.worksheets
 
     @property
     def mereged_range(self):
+        """
+        Свойство - возвращает список диапазонов объеденённых ячеек на листе
+
+        :return: List - список диапазонов объеденённых ячеек на листе
+        """
         return self.active_sheet.merged_cells
 
     def _read_value(self, coord: tuple):
@@ -410,6 +425,15 @@ class XlsxFile:
             return None
         else:
             return int(id_record)
+
+    def get_value(self, coord: tuple):
+        """
+        Метод для получения значения ячейки с координатами coord.
+        :param coord: координаты ячейки
+
+        :return: значение ячейки - str.
+        """
+        return self._read_value(coord)
 
     def set_href(self, coord: tuple, href: str):
         """
@@ -563,6 +587,7 @@ class XlsxFile:
         """
         Метод для получения объекта ячейки.
         Для текущей задачи не нужен, но вдруг пригодится
+
         :param coord: кортеж с координатами ячейки
         :return: объект cell
         """
@@ -573,6 +598,7 @@ class XlsxFile:
     def save(self):
         """
         Метод для сохранения и закрытия файла
+
         :param namefile: Имя файла для сохранения
         :return:
         """

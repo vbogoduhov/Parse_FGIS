@@ -535,7 +535,7 @@ def main():
                 logger.info(f"Ничего не получено для текущего СИ {serial}")
         if type(lst_card) == list and len(lst_card) > 0:
             # Здесь нужно реализовать проверку карточек на все условия:
-            #  - сформировать списко карточек в которых дата поверки совпадает, если таких больше одной
+            #  - сформировать список карточек в которых дата поверки совпадает, если таких больше одной
             #  - проверить эти карточки по идентификаторам
 
             d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
@@ -560,18 +560,30 @@ def main():
             # worksheet.cell(row=coord[0], column=coord[1]).fill = FillYellow
             lst_same_date = []
             for lst in res_request:
+                # Отправляем на проверку полученную из файла строку даты последней поверки
+                # и объект CardFgis по текущему счётчику.
+                # В результате сравниваются две этих даты - если они равны, то True
+                # если не равны, то False
                 if check_verif_date(lst, str_verif_date):
+                    # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
+                    # в список ПУ с одинаковыми датами последней поверки
                     lst_same_date.append(lst)
+            # Если в результате у нас в списке находится только один счётчик с датой последней поверки
+            # совпадающей с тем, что в файле, то устанавливаем ссылку
             if len(lst_same_date) == 1:
                 if set_href(lst_same_date[0], coord, str_verif_date, worksheet):
                     logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
                     workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
+            # Если в списке счётчиков больше 1, то отправляем список на обработку
+            # и получения единственно верного объекта CardFgis, если такое возможно
             elif len(lst_same_date) > 1:
                 res_card = lst_same_date_parse(lst_same_date)
                 if set_href(res_card, coord, str_verif_date, worksheet):
                     workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
                     logger.info(f"Ссылка для {res_card.mi_number} найдена.")
         else:
+            # Если тип res_request == CardFgis, то считаем его единственно верным вариантом
+            # и пытаемся записать ссылку на карточку в ячейку
             if set_href(res_request, coord, str_verif_date, worksheet):
                 logger.info(f"Ссылка для СИ {res_request.mi_number} найдена.")
 
@@ -698,6 +710,13 @@ def main():
         """
         print("Отработала функция work_on_change_serial")
 
+    def work_on_unknow_local():
+        """
+        Функция для получения данных по СИ из локальной БД,
+        :return:
+        """
+        pass
+
     # =============================================================================#
     match mode:
         case 'fgis':
@@ -800,7 +819,7 @@ def main():
                                     prepare_and_write(response, current_row)
 
                     case 'local':
-                        str_verif_date = workbook._read_value((current_row, verif_date_col))
+                        str_verif_date = workbook.get_value((current_row, verif_date_col))
 
                         if not flag_href_style:
                             # Ссылки нет
@@ -834,7 +853,7 @@ def main():
                         elif str(current_serial)[0] == '1':
                             current_serial = '0' + str(current_serial)
                             workbook._write_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
-            else:
+            elif verif_year != last_verif_year and verif_year == valid_year:
                 logger.info(f"Пропускаем строку {current_row}, так как не совпадает год.")
 
     workbook.save()

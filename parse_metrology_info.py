@@ -392,6 +392,13 @@ def work_on_fgis(**kwargs):
     # Перечень видов СИ для обработки
     keywords_si = kwargs['keywords_si']
 
+    # Открываем книгу Excel
+    workbook = xlsx.XlsxFile(name_excel_file)
+    # Получаем объект worksheet - лист книги Excel
+    worksheet = workbook.active_sheet
+    # Получаем значение номера последней активной строки
+    row_end = worksheet.max_row
+
     # Проверка режима работы
     match work_mode:
         case 'fgis':

@@ -374,15 +374,79 @@ def pass_to_rows(start_row: int, end_row: int):
     pass
 
 
+def work_on_fgis(**kwargs):
+    """
+    Функция для обработки файла и получения данных из ФГИС
+    """
+    # Присвоение значений переменным
+    # Имя Excel файла
+    name_excel_file = kwargs['name_excel_file']
+    # Год последней поверки
+    verif_year = kwargs['last_verif_year']
+    # Имя файла, содержащего параметры подключения к локальной БД
+    name_settings_file = kwargs['name_settings_file']
+    # Начальная строка файла Excel
+    start_row = kwargs['start_row']
+    # Режим работы
+    work_mode = kwargs['work_mode']
+    # Перечень видов СИ для обработки
+    keywords_si = kwargs['keywords_si']
+
+    # Проверка режима работы
+    match work_mode:
+        case 'fgis':
+            # Если режим работы - fgis
+            pass
+        case 'unknow':
+            # Если режим работы - unknow
+            pass
+
+
+def work_on_local(**kwargs):
+    """
+    Функция для обработки файла локально, без подключения к ФГИС
+    """
+    pass
+
+
+def work_on_change_serial(**kwargs):
+    """
+    Функция работает при выборе режима работы скрипта 'change_serial'
+    """
+    pass
+
+
+def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work_mode: str,
+                serial_number: str, start_row: int, name_setting_file: str):
+    """
+    Функция по обработке файла с заданными параметрами
+
+    :param name_excel_file: имя файла Excel для обработки (полный путь)
+    :param verif_year: значение года последней поверки, от которого отталкиваться при обработки файла
+    :param keyword_si: строка с перечнем видов СИ для обработки
+    :param work_mode: режим работы скрипта - local, fgis, unknow, change_serial, unknow_local
+    :param serial_number: строка серийного номера СИ, если нужно получить информацию по какому-то
+                        конкретному СИ
+    :param start_row: начальная строка файла, с которой начинать обработку
+    :param name_setting_file: имя файла, в котором находятся параметры подключения к локальной БД
+
+    :return: None
+    """
+    pass
+
+
 def main():
     """
     Основная функция скрипта.
     Обрабатывается заданный файл Excel и сохраняет результаты работы.
 
-    :return:
+    :return: None
     """
+    # Начальная строка файла по умолчанию - если не задана другая
     START_ROW = 13
+    # Запись в лог-файл информации о начале работы
     logger.info(f"Запуск скрипта {__name__}, дата и время: {datetime.now()}")
+    # Парсинг параметров запуска скрипта
     argv_parser = parse_args()
     namespace_argv = argv_parser.parse_args(sys.argv[1:])
     namefile_xlsx = namespace_argv.namefile
@@ -427,7 +491,7 @@ def main():
         START_ROW = start
     else:
         pass
-
+    # Параметры проверены, запись в лог-файл о выбранных параметрах работы скрипта
     logger.info(f"Парсим файл Excel со следующими исходными данными: имя файла - {namefile_xlsx}, "
                 f"год поверки - {verif_year}, СИ для парсинга - {keyword_si}")
 

@@ -186,7 +186,7 @@ def format_dict_for_write(source_dict: dict, row_number: int):
 
 def format_dict_requests(title="", verif_year=datetime.today().year, mitype=None, number="", rows=str(100)):
     """
-    Формируем словарь для формирования запроса в БД ФГИС
+    Формируем словарь с данными для запроса в БД ФГИС
 
     :param title: наименование типа СИ, часть или полное наименование
     :param verif_year: год последней поверки, для выборки из ФГИС
@@ -324,6 +324,7 @@ def check_verif_date(card: localdb.CardFgis, last_verif_date: str):
     """
     Функция для сверки даты последней поверки текущего СИ
     и даты послдней поверки, полученной из ФГИС
+
     :param card: объект CardFgis
     :param last_verif_date: дата последней поверки текущего СИ, полученная из файла
     :return: True or False
@@ -377,6 +378,7 @@ def main():
     """
     Основная функция скрипта.
     Обрабатывается заданный файл Excel и сохраняет результаты работы.
+
     :return:
     """
     START_ROW = 13
@@ -436,6 +438,7 @@ def main():
     def check_si_on_localdb(si_inform: dict):
         """
         Проверяем наличие в локальной БД информации по текущему СИ
+
         :param si_inform: словарь с данными по СИ:
                             'serial' - серийный номер СИ,
                             'type' - тип СИ,
@@ -710,9 +713,17 @@ def main():
         """
         print("Отработала функция work_on_change_serial")
 
-    def work_on_unknow_local():
+    def work_on_unknow_local(last_verif_year: int, si_for_local: str, namefile: str, start_row: int,
+                database: localdb.WorkDb):
         """
-        Функция для получения данных по СИ из локальной БД,
+        Функция для получения данных по СИ из локальной БД, предполагая, что год
+        последней поверки - текущий год
+
+        :param last_verif_year:
+        :param si_for_local:
+        :param namefile:
+        :param start_row:
+        :param database:
         :return:
         """
         pass

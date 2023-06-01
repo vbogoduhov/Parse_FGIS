@@ -439,7 +439,75 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
 
     :return: None
     """
-    pass
+    # Читаем файл с настройками подключения к локальной БД
+    localdb_parameters = read_settings_file(name_setting_file)
+    # Устанавливаем соединение с БД
+    database = localdb.WorkDb(database=localdb_parameters['database'],
+                              user=localdb_parameters['user'],
+                              password=localdb_parameters['password'],
+                              port=localdb_parameters['port'],
+                              host=localdb_parameters['host'])
+
+    # Открываем файл Excel
+    workbook = xlsx.XlsxFile(name_excel_file)
+    # Получаем активный лист и значение максимальной строки (конечной)
+    worksheet = workbook.active_sheet
+    row_end = worksheet.max_row
+
+    # Инициализация прогрессбара
+    bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (
+            1 * len(keyword_si.split(sep=" "))))
+
+    # Основной цикл по видам СИ
+    for current_si in keyword_si.split(sep=' '):
+        # Нужно получить номера столбцов для соответствующего вида СИ
+        # Столбец типа СИ
+        type_col = COLUMNS_SI[current_si]['type']
+        # Столбец серийного номера СИ
+        serial_col = COLUMNS_SI[current_si]['serial']
+        # Столбец даты последней поверки
+        verif_date_col = COLUMNS_SI[current_si]['verif_date']
+        # Столбец даты следующей поверки
+        valid_date_col = COLUMNS_SI[current_si]['valid_date']
+        # Столбец для ссылки на корточку СИ
+        href_col = COLUMNS_SI[current_si]['href']
+        logger.info(f"Начинаем обход строк файла для вида СИ: {current_si}")
+
+        # Цикл для обхода файла построчно
+        for current_row in range(start_row, row_end + 1):
+            bar.next()
+            inform_si = workbook.get_inform_si(current_si, current_row)
+            logger.info(f"Дата последней поверки для {current_si} и строки №{current_row} - {inform_si['verif_date']}")
+
+            # Пытаемся получить год поверки из полученной строки
+            # даты последней поверки
+            if inform_si['verif_date'] is None:
+                last_verif_year = None
+                valid_year = None
+            else:
+                last_verif_year = inform_si['verif_date'].year
+                # print(type(inform_si['valid_date']))
+                if type(inform_si['valid_date']) is date:
+                    valid_year = inform_si['valid_date'].year
+                else:
+                    # print(f"type: {type(inform_si['valid_date'])}, type_verif: {type(inform_si['verif_date'])}")
+                    # print(type(inform_si['valid_date']) == date)
+                    valid_year = None
+                # Проверяем режим работы
+                match work_mode:
+                    # Если режим работы - unknow
+                    case 'unknow':
+                        # Запуск функции для обработки данных по СИ при режиме unknow
+                        pass
+                    case 'fgis':
+                        # Запуск функции для обработки данных по СИ при режиме fgis
+                        pass
+                    case 'local':
+                        # Запуск функции для обработки данных по СИ при режиме local
+                        pass
+                    case 'unknow_local':
+                        # Запуск функции для обработки данных по СИ при режиме unknow_local
+                        pass
 
 
 def main():
@@ -464,23 +532,24 @@ def main():
     start = namespace_argv.START
     namefile_setting = namespace_argv.setfile
 
+
     # =========================================================================================#
 
-    # Читаем файл с параметрами подключения к локальной БД
-    local_db_parameters = read_settings_file(namefile_setting)
-    # Устанавливаем соединение с БД
-    database = localdb.WorkDb(database=local_db_parameters['database'],
-                              user=local_db_parameters['user'],
-                              password=local_db_parameters['password'],
-                              port=local_db_parameters['port'],
-                              host=local_db_parameters['host'])
+    # # Читаем файл с параметрами подключения к локальной БД
+    # local_db_parameters = read_settings_file(namefile_setting)
+    # # Устанавливаем соединение с БД
+    # database = localdb.WorkDb(database=local_db_parameters['database'],
+    #                           user=local_db_parameters['user'],
+    #                           password=local_db_parameters['password'],
+    #                           port=local_db_parameters['port'],
+    #                           host=local_db_parameters['host'])
 
     # ==========================================================================================#
 
     # Проверяем введённые параметры на корректность,
     # недопустим режим unknow и год 0
-    if verif_year != 0 and mode == 'unknow':
-        print(f"Заданы некорректные параметры запуска: при использовании режима 'unknow' не нужно задавать год."
+    if verif_year != 0 and (mode in ['unknow', 'unknow_local']):
+        print(f"Заданы некорректные параметры запуска: при использовании режима {mode} не нужно задавать год."
               f"Прекращаем работу...")
         logger.warning(
             f"Заданы некорректные параметры запуска: mode = {mode}, verif_year = {verif_year}.\nПрекращаем работу.")
@@ -498,13 +567,25 @@ def main():
         START_ROW = start
     else:
         pass
+    if verif_year == 0 and mode == 'unknow_local':
+        verif_year = date.today().year
+
     # Параметры проверены, запись в лог-файл о выбранных параметрах работы скрипта
     logger.info(f"Парсим файл Excel со следующими исходными данными: имя файла - {namefile_xlsx}, "
                 f"год поверки - {verif_year}, СИ для парсинга - {keyword_si}")
 
-    workbook = xlsx.XlsxFile(namefile_xlsx)
-    worksheet = workbook.active_sheet
-    row_end = worksheet.max_row
+    # Вызывем функцию по дальнейшей обработке файла
+    file_processing(name_excel_file=namefile_xlsx,
+                    verif_year=verif_year,
+                    keyword_si=keyword_si,
+                    work_mode=mode,
+                    serial_number=serial,
+                    start_row=START_ROW,
+                    name_setting_file=namefile_setting)
+
+    # workbook = xlsx.XlsxFile(namefile_xlsx)
+    # worksheet = workbook.active_sheet
+    # row_end = worksheet.max_row
 
     def check_si_on_localdb(si_inform: dict):
         """

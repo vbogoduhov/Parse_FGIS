@@ -28,6 +28,9 @@
 import sys
 import os
 import argparse
+
+import requests
+
 import app_logger
 import fgis_eapi
 import localdb
@@ -374,39 +377,149 @@ def pass_to_rows(start_row: int, end_row: int):
     pass
 
 
+def check_response(response: list[dict]):
+    """
+    Проверка ответа по запросу во ФГИС
+    """
+    # Проверяем результаты запроса, получено ли вообще что-нибудь
+    # Если количество элементов списка в ответе больше 0, то есть
+    # что-то получили
+    if len(response) > 0:
+        if len(response) > 1:
+            return 0
+            # prepare_and_write(response, 0)
+        elif len(response) == 1:
+            return 1
+            # prepare_and_write(response, current_row)
+    else:
+        return -1
+
+
+def prepare_and_write(response: list, database: localdb.WorkDb, row_number: int = 0):
+    """
+    Функция для подготовки к записи в локальную БД данных,
+    полученных из ФГИС.
+
+    :param response: список со словарями
+    :param row_number: номер строки файла Excel, которая в данный момент обрабатывается
+    :param database: объект localdb.WordDb - локальной БД
+    :return:
+    """
+    for item in response:
+        logger.info(f"Item = {item}")
+        if item is not None:
+            dict_for_write = check_dict_for_write(format_dict_for_write(item, row_number), database)
+            logger.info(f"dict_for_write = {dict_for_write}")
+            # Попытка записи в локальную БД
+            if dict_for_write is not None:
+                try:
+                    database.write_metrology(dict_for_write)
+                except Exception as err:
+                    logger.warning(f"{err.__str__()}")
+                    logger.warning(
+                        f"Не удалось записать данные в БД <{str(dict_for_write)}>")
+
+
+
 def work_on_fgis(**kwargs):
     """
     Функция для обработки файла и получения данных из ФГИС
     """
     # Присвоение значений переменным
-    # Имя Excel файла
-    name_excel_file = kwargs['name_excel_file']
-    # Год последней поверки
-    verif_year = kwargs['last_verif_year']
-    # Имя файла, содержащего параметры подключения к локальной БД
-    name_settings_file = kwargs['name_settings_file']
-    # Начальная строка файла Excel
-    start_row = kwargs['start_row']
+    # # Имя Excel файла
+    # name_excel_file = kwargs['name_excel_file']
+    # # Год последней поверки
+    # verif_year = kwargs['last_verif_year']
+    # # Имя файла, содержащего параметры подключения к локальной БД
+    # name_settings_file = kwargs['name_settings_file']
+    # # Начальная строка файла Excel
+    # start_row = kwargs['start_row']
     # Режим работы
     work_mode = kwargs['work_mode']
-    # Перечень видов СИ для обработки
-    keywords_si = kwargs['keywords_si']
+    # Серийный номер, если нужно найти информацию по какому-то конкретному номеру
+    serial = kwargs['serial']
+    # Информация по СИ из файла
+    inform_si = kwargs['inform_si']
+    # Объект локально БД - localdb.WorkDb
+    database = kwargs['database']
+    current_si = kwargs['current_si']
+    # # Перечень видов СИ для обработки
+    # keywords_si = kwargs['keywords_si']
+    #
+    # # Открываем книгу Excel
+    # workbook = xlsx.XlsxFile(name_excel_file)
+    # # Получаем объект worksheet - лист книги Excel
+    # worksheet = workbook.active_sheet
+    # # Получаем значение номера последней активной строки
+    # row_end = worksheet.max_row
 
-    # Открываем книгу Excel
-    workbook = xlsx.XlsxFile(name_excel_file)
-    # Получаем объект worksheet - лист книги Excel
-    worksheet = workbook.active_sheet
-    # Получаем значение номера последней активной строки
-    row_end = worksheet.max_row
+    def request_and_write(current_serial, database, last_verif_year, mitype, current_si):
+        # Формируем словарь с данными для запроса во ФГИС
+        dict_request = format_dict_requests(title=current_si,
+                                            number=current_serial,
+                                            verif_year=last_verif_year,
+                                            mitype=mitype,
+                                            rows=str(100))
+        # Делаем запрос, получаем ответ
+        response = fgis_eapi.request_fgis(dict_request)
+        match check_response(response):
+            # Если количество элементов в ответе = 1
+            case 1:
+                logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
+                prepare_and_write(response=response,
+                                  database=database,
+                                  row_number=current_row)
+                logger.info(f"Обработан СИ с номером - {current_serial}")
+            # Если количество элементов в ответе больше 1
+            case 0:
+                logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
+                prepare_and_write(response=response,
+                                  database=database,
+                                  row_number=0)
+                logger.info(f"Обработан СИ с номером - {current_serial}")
+            # Если ничего не получено на запрос, ничего и не обрабатываем
+            case -1:
+                logger.info(f"Для номера СИ - {current_serial}, по запросу к ФГИС ничего не получено")
+                continue
 
     # Проверка режима работы
     match work_mode:
         case 'fgis':
             # Если режим работы - fgis
-            pass
+            # Текущий серийный номер СИ
+            current_serial = inform_si['serial']
+            # Текущий тип СИ
+            mitype = inform_si['type']
+            # Год последней поверки
+            last_verif_year = kwargs['last_verif_year']
+            # Год следующей поверки
+            valid_year = kwargs['valid_year']
+            # Проверяем параметр serial
+            if serial != '' and serial != current_serial:
+                logger.info(
+                    f"Задан конкретный номер СИ для поиска - {serial}. Текущий номер СИ - {current_serial}"
+                    f" не совпадает с введённым, пропускаем его.")
+            else:
+                logger.info(f"Готовим запрос в БД ФГИС по СИ - №{current_serial}")
+                request_and_write(current_serial, database, last_verif_year, mitype, current_si)
+
         case 'unknow':
             # Если режим работы - unknow
-            pass
+            # Текущий серийный номер СИ
+            current_serial = inform_si['serial']
+            # Текущий тип СИ
+            mitype = inform_si['type']
+            # Год последней поверки
+            last_verif_year = kwargs['last_verif_year']
+            # Год следующей поверки
+            valid_year = kwargs['valid_year']
+            # Проверяем, если серийный номер, тип и год последней поверки не None
+            # то начинаем запросы к ФГИС
+            if current_serial != None and mitype != None and last_verif_year != None:
+                # Цикл по годам текущего СИ
+                for year in range(last_verif_year, datetime.now().year + 1):
+                    request_and_write(current_serial, database, last_verif_year, mitype, current_si)
+
 
 
 def work_on_local(**kwargs):
@@ -498,10 +611,56 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                     # Если режим работы - unknow
                     case 'unknow':
                         # Запуск функции для обработки данных по СИ при режиме unknow
-                        pass
+                        if verif_year == 0 and valid_year != None:
+                            work_on_fgis(work_mode=work_mode, serial=serial_number,
+                                         inform_si=inform_si, database=database,
+                                         valid_year=valid_year, last_verif_year=last_verif_year, current_si=current_si)
+
+                            # # Текущий серийный номер СИ
+                            # current_serial = inform_si['serial']
+                            # # Текущий тип СИ
+                            # mitype = inform_si['type']
+                            # # Проверяем, если серийный номер, тип и год последней поверки не None
+                            # # то начинаем запросы к ФГИС
+                            # if current_serial != None and mitype != None and last_verif_year != None:
+                            #     # Цикл по годам текущего СИ
+                            #     for year in range(last_verif_year, datetime.now().year + 1):
+                            #         # Формируем словарь с данными для запроса во ФГИС
+                            #         dict_request = format_dict_requests(title=current_si,
+                            #                                             number=current_serial,
+                            #                                             verif_year=last_verif_year,
+                            #                                             mitype=mitype,
+                            #                                             rows=str(100))
+                            #         # Делаем запрос, получаем ответ
+                            #         response = fgis_eapi.request_fgis(dict_request)
+                            #         match check_response(response):
+                            #             # Если количество элементов в ответе = 1
+                            #             case 1:
+                            #                 logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
+                            #                 prepare_and_write(response=response,
+                            #                                   database=database,
+                            #                                   row_number=current_row)
+                            #                 logger.info(f"Обработан СИ с номером - {current_serial}")
+                            #             # Если количество элементов в ответе больше 1
+                            #             case 0:
+                            #                 logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
+                            #                 prepare_and_write(response=response,
+                            #                                   database=database,
+                            #                                   row_number=0)
+                            #                 logger.info(f"Обработан СИ с номером - {current_serial}")
+                            #             # Если ничего не получено на запрос, ничего и не обрабатываем
+                            #             case -1:
+                            #                 logger.info(f"Для номера СИ - {current_serial}, по запросу к ФГИС ничего не получено")
+                            #                 continue
+                        else:
+                            logger.warning(f"Условия для запуска обработки СИ по всем годам не соответствуют требуемым."
+                                           f"{verif_year = }, {valid_year = }")
                     case 'fgis':
                         # Запуск функции для обработки данных по СИ при режиме fgis
-                        pass
+                        work_on_fgis(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
+                                     database=database, valid_year=valid_year, last_verif_year=last_verif_year,
+                                     current_si=current_si)
+
                     case 'local':
                         # Запуск функции для обработки данных по СИ при режиме local
                         pass
@@ -803,29 +962,29 @@ def main():
             workbook.set_fill(coord, 'blue')
             return False
 
-    def prepare_and_write(response: list, row_number: int = 0):
-        """
-        Функция для подготовки к записи в локальную БД данных,
-        полученных из ФГИС.
-
-        :param response: список со словарями
-        :param row_number: номер строки файла Excel, которая в данный момент обрабатывается
-        :return:
-        """
-        for item in response:
-            logger.info(f"Item = {item}")
-            if item is not None:
-                dict_for_write = check_dict_for_write(format_dict_for_write(item, row_number), database)
-                logger.info(f"dict_for_write = {dict_for_write}")
-                # Попытка записи в локальную БД
-                if dict_for_write is not None:
-                    try:
-                        database.write_metrology(dict_for_write)
-                    except Exception as err:
-                        logger.warning(f"{err.__str__()}")
-                        logger.warning(
-                            f"Не удалось записать данные в БД <{str(dict_for_write)}>")
-        logger.info(f"Обработан СИ с номером - {current_serial}")
+    # def prepare_and_write(response: list, row_number: int = 0):
+    #     """
+    #     Функция для подготовки к записи в локальную БД данных,
+    #     полученных из ФГИС.
+    #
+    #     :param response: список со словарями
+    #     :param row_number: номер строки файла Excel, которая в данный момент обрабатывается
+    #     :return:
+    #     """
+    #     for item in response:
+    #         logger.info(f"Item = {item}")
+    #         if item is not None:
+    #             dict_for_write = check_dict_for_write(format_dict_for_write(item, row_number), database)
+    #             logger.info(f"dict_for_write = {dict_for_write}")
+    #             # Попытка записи в локальную БД
+    #             if dict_for_write is not None:
+    #                 try:
+    #                     database.write_metrology(dict_for_write)
+    #                 except Exception as err:
+    #                     logger.warning(f"{err.__str__()}")
+    #                     logger.warning(
+    #                         f"Не удалось записать данные в БД <{str(dict_for_write)}>")
+    #     logger.info(f"Обработан СИ с номером - {current_serial}")
 
     # =============================================================================#
     # Функции по режимам работы (добавить), пока не вводить в строй

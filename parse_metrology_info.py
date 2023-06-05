@@ -395,6 +395,112 @@ def check_response(response: list[dict]):
         return -1
 
 
+def check_result_local_request(res_request, coord: tuple, str_verif_date: str, workbook):
+    """
+    Функция для проверки результатов запроса к локальной БД
+    и записи ссылки в ячейку, если она найдена
+
+    :param res_request: результаты запроса
+    :return:
+    """
+    if type(res_request) == list:
+        # worksheet.cell(row=coord[0],
+        #                column=coord[1]).value = f"Проверить в ручном режиме. Найдено {len(res_request)} значения(й)"
+        # xlsx.set_fill(worksheet, coord, 'yellow')
+        # worksheet.cell(row=coord[0], column=coord[1]).fill = FillYellow
+        lst_same_date = []
+        for lst in res_request:
+            # Отправляем на проверку полученную из файла строку даты последней поверки
+            # и объект CardFgis по текущему счётчику.
+            # В результате сравниваются две этих даты - если они равны, то True
+            # если не равны, то False
+            if check_verif_date(lst, str_verif_date):
+                # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
+                # в список ПУ с одинаковыми датами последней поверки
+                lst_same_date.append(lst)
+        # Если в результате у нас в списке находится только один счётчик с датой последней поверки
+        # совпадающей с тем, что в файле, то устанавливаем ссылку
+        if len(lst_same_date) == 1:
+            if set_href(lst_same_date[0], coord, str_verif_date, worksheet):
+                logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
+                workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
+        # Если в списке счётчиков больше 1, то отправляем список на обработку
+        # и получения единственно верного объекта CardFgis, если такое возможно
+        elif len(lst_same_date) > 1:
+            res_card = lst_same_date_parse(lst_same_date)
+            if set_href(res_card, coord, str_verif_date, worksheet):
+                workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
+                logger.info(f"Ссылка для {res_card.mi_number} найдена.")
+    else:
+        # Если тип res_request == CardFgis, то считаем его единственно верным вариантом
+        # и пытаемся записать ссылку на карточку в ячейку
+        if set_href(res_request, coord, str_verif_date, worksheet):
+            logger.info(f"Ссылка для СИ {res_request.mi_number} найдена.")
+
+
+def lst_same_date_parse(lst_same_date: list):
+    """
+    Функция для обработки карточек с одинаковыми датами поверки
+
+    :param lst_same_date: список с объектами CardFgis
+    :return: объект CardFgis
+    """
+    tmp_lst_card = {}
+    # for ind, card in enumerate(lst_same_date):
+    #     for i, c in enumerate(lst_same_date[1:]):
+    #         if card.result_docnum[:card.result_docnum.rfind('/')] == c.result_docnum[:c.result_docnum.rfind('/')]:
+    #             tmp_lst_card[ind].append(i)
+    # tmp_lst_card[lst_same_date[0].vri_id] = lst_same_date[0]
+    for ind in range(len(lst_same_date)):
+        try:
+            if lst_same_date[ind].check_equals(lst_same_date[ind + 1]):
+                tmp_lst_card[lst_same_date[ind].vri_id] = lst_same_date[ind]
+                tmp_lst_card[lst_same_date[ind + 1].vri_id] = lst_same_date[ind + 1]
+        except IndexError:
+            break
+    keys = {int(item[0][2:]): item[0] for item in tmp_lst_card.items()}
+    max_id = 0
+    for k in list(keys.keys()):
+        if k > max_id:
+            max_id = k
+    return tmp_lst_card[keys[max_id]]
+
+
+def set_href(card, coord, str_verif_date, workbook):
+    """
+    Функция для записи гиперссылки по СИ в ячейку
+
+    :param card: объект CardFgis с информацией по СИ
+    :param coord: кортеж с коордиинатами ячейки для записи
+    :param str_verif_date: строка даты последней поверки
+    :param worksheet:
+    :return: True or False
+    """
+    if not card == None:
+        verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
+        date_current_card = verif_date_current_card.date()
+        if type(str_verif_date) == datetime:
+            date_verif_current_row = str_verif_date.date()
+        elif type(str_verif_date) == str:
+            date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
+        if date_verif_current_row == date_current_card:
+            href = card.href
+
+            if not workbook.check_merged(coord):
+                workbook.set_href(coord, href)
+                workbook.set_fill(coord, 'green')
+                return True
+        else:
+            href = card.href
+            workbook.set_href(coord, href)
+            workbook.set_fill(coord, 'red')
+            workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
+            return False
+    else:
+        workbook.set_fill(coord, 'blue')
+        return False
+
+
 def prepare_and_write(response: list, database: localdb.WorkDb, row_number: int = 0):
     """
     Функция для подготовки к записи в локальную БД данных,
@@ -419,6 +525,89 @@ def prepare_and_write(response: list, database: localdb.WorkDb, row_number: int 
                     logger.warning(
                         f"Не удалось записать данные в БД <{str(dict_for_write)}>")
 
+
+def local_request(serial, si, year, current_type, verif_date):
+    """
+    Обращаемся к локальной БД для получения данных по номеру, типу СИ
+    и году поверки
+
+    :param serial: номер СИ
+    :param si: тип СИ
+    :param year: год поверки СИ
+    :param current_type: наименование типа СИ
+    :return: словарь с данными по текущему СИ
+    """
+    dict_filter = {'serial_si': serial,
+                   'name_si': si,
+                   'verif_year': year,
+                   'type_si': current_type,
+                   'verif_date': verif_date}
+
+    # lst_card = database.get_card_for_si(dict_filter)
+    lst_card = database.get_card_si(dict_filter['serial_si'], dict_filter['type_si'])
+
+    if not type(lst_card) == list and not lst_card == None:
+        return lst_card
+    else:
+        if not lst_card == None:
+            logger.info(f"Получено для текущего СИ {len(lst_card)} значений из БД.")
+        else:
+            logger.info(f"Ничего не получено для текущего СИ {serial}")
+    if type(lst_card) == list and len(lst_card) > 0:
+        # Здесь нужно реализовать проверку карточек на все условия:
+        #  - сформировать список карточек в которых дата поверки совпадает, если таких больше одной
+        #  - проверить эти карточки по идентификаторам
+
+        d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
+        if len(d) == 1:
+            res_lst_card = d[list(d.keys())[0]]
+            return res_lst_card
+        else:
+            return list(d.values())
+
+
+def parse_list_card(lst, type_si, verif_date):
+    """
+    Функция для обработки списка объектов CardFgis
+
+    :param lst: список объектов CardFgis
+    :param type_si: строка типа СИ
+    :param verif_date: дата последней поверки, взята из файла
+    :return: словарь с объектами CardFgis, по которым дата последней поверки
+            совпадает с требуемой
+    """
+
+    res_dict = {}
+    date = None
+
+    if type(verif_date) is datetime:
+        date = datetime.strftime(verif_date, '%d.%m.%Y')
+    elif type(verif_date) is str:
+        date = datetime.strptime(verif_date, '%d.%m.%Y')
+    if len(lst) == 1:
+        res_dict[0] = lst[0]
+    else:
+        for ind, card in enumerate(lst):
+            current_type = card.mi_mitype
+            current_mod = card.mi_modification
+            parse_type = TypeParseSi(current_type, type_si)
+            res_parse = parse_type.parse()
+            parse_mod = TypeParseSi(current_mod, type_si)
+            res_parse_mod = parse_mod.parse()
+            if check_true(res_parse) and date == card.verification_date:
+                res_dict[ind] = card
+
+    return res_dict
+
+
+def check_true(dct):
+    lst = list(dct.values())
+    count = 0
+    for i in lst:
+        if i:
+            count += 1
+
+    return True if count > 0 else False
 
 
 def work_on_fgis(**kwargs):
@@ -526,7 +715,49 @@ def work_on_local(**kwargs):
     """
     Функция для обработки файла локально, без подключения к ФГИС
     """
-    pass
+    # Информация по текущему СИ
+    inform_si = kwargs['inform_si']
+    current_si = kwargs['current_si']
+    current_row = kwargs['current_row']
+    # Режим работы
+    work_mode = kwargs['work_mode']
+    # Объект локальной БД
+    database = kwargs['database']
+    # Год следующей поверки
+    valid_year = kwargs['valid_year']
+    # Год последней поверки
+    last_verif_year = kwargs['last_verif_year']
+    # Книга Excel
+    workbook = kwargs['workbook']
+    flag_href_style = inform_si['flag_href_style']
+    mitype = inform_si['type']
+    verif_date_col = kwargs['verif_date_col']
+    href_col = kwargs['href_col']
+
+    match work_mode:
+        case 'local':
+            str_verif_date = workbook.get_value((current_row, verif_date_col))
+            # current_serial = inform_si['serial']
+            # Проверка наличия ссылки по СИ на текущей строке файла
+            # Если ссылки нет, то выполняем запрос
+            if not flag_href_style:
+                res_local_request = local_request(inform_si['serial'], current_si, last_verif_year,
+                                                  mitype, str_verif_date)
+                check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
+            else:
+                if database.check_valid_href(href_value):
+                    cur_id_record = database.get_id_for_href(href_value)
+                    if not inform_si['id'] is None:
+                        if cur_id_record == inform_si['id']:
+                            workbook.set_fill((current_row, href_col), 'orange')
+                    else:
+                        workbook.set_fill((current_row, href_col), 'orange')
+                        # workbook.set_id_record((current_row, COLUMN_ID), cur_id_record)
+                else:
+                    workbook.set_fill((current_row, href_col), 'red_brown')
+
+
+
 
 
 def work_on_change_serial(**kwargs):
@@ -615,43 +846,6 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                             work_on_fgis(work_mode=work_mode, serial=serial_number,
                                          inform_si=inform_si, database=database,
                                          valid_year=valid_year, last_verif_year=last_verif_year, current_si=current_si)
-
-                            # # Текущий серийный номер СИ
-                            # current_serial = inform_si['serial']
-                            # # Текущий тип СИ
-                            # mitype = inform_si['type']
-                            # # Проверяем, если серийный номер, тип и год последней поверки не None
-                            # # то начинаем запросы к ФГИС
-                            # if current_serial != None and mitype != None and last_verif_year != None:
-                            #     # Цикл по годам текущего СИ
-                            #     for year in range(last_verif_year, datetime.now().year + 1):
-                            #         # Формируем словарь с данными для запроса во ФГИС
-                            #         dict_request = format_dict_requests(title=current_si,
-                            #                                             number=current_serial,
-                            #                                             verif_year=last_verif_year,
-                            #                                             mitype=mitype,
-                            #                                             rows=str(100))
-                            #         # Делаем запрос, получаем ответ
-                            #         response = fgis_eapi.request_fgis(dict_request)
-                            #         match check_response(response):
-                            #             # Если количество элементов в ответе = 1
-                            #             case 1:
-                            #                 logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
-                            #                 prepare_and_write(response=response,
-                            #                                   database=database,
-                            #                                   row_number=current_row)
-                            #                 logger.info(f"Обработан СИ с номером - {current_serial}")
-                            #             # Если количество элементов в ответе больше 1
-                            #             case 0:
-                            #                 logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
-                            #                 prepare_and_write(response=response,
-                            #                                   database=database,
-                            #                                   row_number=0)
-                            #                 logger.info(f"Обработан СИ с номером - {current_serial}")
-                            #             # Если ничего не получено на запрос, ничего и не обрабатываем
-                            #             case -1:
-                            #                 logger.info(f"Для номера СИ - {current_serial}, по запросу к ФГИС ничего не получено")
-                            #                 continue
                         else:
                             logger.warning(f"Условия для запуска обработки СИ по всем годам не соответствуют требуемым."
                                            f"{verif_year = }, {valid_year = }")
@@ -663,7 +857,10 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
 
                     case 'local':
                         # Запуск функции для обработки данных по СИ при режиме local
-                        pass
+                        if verif_year == last_verif_year:
+                            work_on_local(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
+                                          database=database, valid_year=valid_year, last_verif_year=last_verif_year,
+                                          current_si=current_si, current_row=current_row, workbook=workbook, href_col=href_col)
                     case 'unknow_local':
                         # Запуск функции для обработки данных по СИ при режиме unknow_local
                         pass
@@ -763,14 +960,14 @@ def main():
         type = si_inform['type']
         verif_date = si_inform['verif_date']
 
-    def check_true(dct):
-        lst = list(dct.values())
-        count = 0
-        for i in lst:
-            if i:
-                count += 1
-
-        return True if count > 0 else False
+    # def check_true(dct):
+    #     lst = list(dct.values())
+    #     count = 0
+    #     for i in lst:
+    #         if i:
+    #             count += 1
+    #
+    #     return True if count > 0 else False
 
     def fgis_request(request_parameters: dict):
         """
@@ -787,146 +984,146 @@ def main():
         response = fgis_eapi.request_fgis(dict_request)
         return response
 
-    def parse_list_card(lst, type_si, verif_date):
-        """
-        Функция для обработки списка объектов CardFgis
+    # def parse_list_card(lst, type_si, verif_date):
+    #     """
+    #     Функция для обработки списка объектов CardFgis
+    #
+    #     :param lst: список объектов CardFgis
+    #     :param type_si: строка типа СИ
+    #     :param verif_date: дата последней поверки, взята из файла
+    #     :return: словарь с объектами CardFgis, по которым дата последней поверки
+    #             совпадает с требуемой
+    #     """
+    #
+    #     res_dict = {}
+    #     date = None
+    #
+    #     if type(verif_date) is datetime:
+    #         date = datetime.strftime(verif_date, '%d.%m.%Y')
+    #     elif type(verif_date) is str:
+    #         date = datetime.strptime(verif_date, '%d.%m.%Y')
+    #     if len(lst) == 1:
+    #         res_dict[0] = lst[0]
+    #     else:
+    #         for ind, card in enumerate(lst):
+    #             current_type = card.mi_mitype
+    #             current_mod = card.mi_modification
+    #             parse_type = TypeParseSi(current_type, type_si)
+    #             res_parse = parse_type.parse()
+    #             parse_mod = TypeParseSi(current_mod, type_si)
+    #             res_parse_mod = parse_mod.parse()
+    #             if check_true(res_parse) and date == card.verification_date:
+    #                 res_dict[ind] = card
+    #
+    #     return res_dict
 
-        :param lst: список объектов CardFgis
-        :param type_si: строка типа СИ
-        :param verif_date: дата последней поверки, взята из файла
-        :return: словарь с объектами CardFgis, по которым дата последней поверки
-                совпадает с требуемой
-        """
+    # def local_request(serial, si, year, current_type, verif_date):
+    #     """
+    #     Обращаемся к локальной БД для получения данных по номеру, типу СИ
+    #     и году поверки
+    #
+    #     :param serial: номер СИ
+    #     :param si: тип СИ
+    #     :param year: год поверки СИ
+    #     :param current_type: наименование типа СИ
+    #     :return: словарь с данными по текущему СИ
+    #     """
+    #     dict_filter = {'serial_si': serial,
+    #                    'name_si': si,
+    #                    'verif_year': year,
+    #                    'type_si': current_type,
+    #                    'verif_date': verif_date}
+    #
+    #     # lst_card = database.get_card_for_si(dict_filter)
+    #     lst_card = database.get_card_si(dict_filter['serial_si'], dict_filter['type_si'])
+    #
+    #     if not type(lst_card) == list and not lst_card == None:
+    #         return lst_card
+    #     else:
+    #         if not lst_card == None:
+    #             logger.info(f"Получено для текущего СИ {len(lst_card)} значений из БД.")
+    #         else:
+    #             logger.info(f"Ничего не получено для текущего СИ {serial}")
+    #     if type(lst_card) == list and len(lst_card) > 0:
+    #         # Здесь нужно реализовать проверку карточек на все условия:
+    #         #  - сформировать список карточек в которых дата поверки совпадает, если таких больше одной
+    #         #  - проверить эти карточки по идентификаторам
+    #
+    #         d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
+    #         if len(d) == 1:
+    #             res_lst_card = d[list(d.keys())[0]]
+    #             return res_lst_card
+    #         else:
+    #             return list(d.values())
 
-        res_dict = {}
-        date = None
+    # def check_result_local_request(res_request, coord: tuple, str_verif_date: str):
+    #     """
+    #     Функция для проверки результатов запроса к локальной БД
+    #     и записи ссылки в ячейку, если она найдена
+    #
+    #     :param res_request: результаты запроса
+    #     :return:
+    #     """
+    #     if type(res_request) == list:
+    #         # worksheet.cell(row=coord[0],
+    #         #                column=coord[1]).value = f"Проверить в ручном режиме. Найдено {len(res_request)} значения(й)"
+    #         # xlsx.set_fill(worksheet, coord, 'yellow')
+    #         # worksheet.cell(row=coord[0], column=coord[1]).fill = FillYellow
+    #         lst_same_date = []
+    #         for lst in res_request:
+    #             # Отправляем на проверку полученную из файла строку даты последней поверки
+    #             # и объект CardFgis по текущему счётчику.
+    #             # В результате сравниваются две этих даты - если они равны, то True
+    #             # если не равны, то False
+    #             if check_verif_date(lst, str_verif_date):
+    #                 # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
+    #                 # в список ПУ с одинаковыми датами последней поверки
+    #                 lst_same_date.append(lst)
+    #         # Если в результате у нас в списке находится только один счётчик с датой последней поверки
+    #         # совпадающей с тем, что в файле, то устанавливаем ссылку
+    #         if len(lst_same_date) == 1:
+    #             if set_href(lst_same_date[0], coord, str_verif_date, worksheet):
+    #                 logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
+    #                 workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
+    #         # Если в списке счётчиков больше 1, то отправляем список на обработку
+    #         # и получения единственно верного объекта CardFgis, если такое возможно
+    #         elif len(lst_same_date) > 1:
+    #             res_card = lst_same_date_parse(lst_same_date)
+    #             if set_href(res_card, coord, str_verif_date, worksheet):
+    #                 workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
+    #                 logger.info(f"Ссылка для {res_card.mi_number} найдена.")
+    #     else:
+    #         # Если тип res_request == CardFgis, то считаем его единственно верным вариантом
+    #         # и пытаемся записать ссылку на карточку в ячейку
+    #         if set_href(res_request, coord, str_verif_date, worksheet):
+    #             logger.info(f"Ссылка для СИ {res_request.mi_number} найдена.")
 
-        if type(verif_date) is datetime:
-            date = datetime.strftime(verif_date, '%d.%m.%Y')
-        elif type(verif_date) is str:
-            date = datetime.strptime(verif_date, '%d.%m.%Y')
-        if len(lst) == 1:
-            res_dict[0] = lst[0]
-        else:
-            for ind, card in enumerate(lst):
-                current_type = card.mi_mitype
-                current_mod = card.mi_modification
-                parse_type = TypeParseSi(current_type, type_si)
-                res_parse = parse_type.parse()
-                parse_mod = TypeParseSi(current_mod, type_si)
-                res_parse_mod = parse_mod.parse()
-                if check_true(res_parse) and date == card.verification_date:
-                    res_dict[ind] = card
-
-        return res_dict
-
-    def local_request(serial, si, year, current_type, verif_date):
-        """
-        Обращаемся к локальной БД для получения данных по номеру, типу СИ
-        и году поверки
-
-        :param serial: номер СИ
-        :param si: тип СИ
-        :param year: год поверки СИ
-        :param current_type: наименование типа СИ
-        :return: словарь с данными по текущему СИ
-        """
-        dict_filter = {'serial_si': serial,
-                       'name_si': si,
-                       'verif_year': year,
-                       'type_si': current_type,
-                       'verif_date': verif_date}
-
-        # lst_card = database.get_card_for_si(dict_filter)
-        lst_card = database.get_card_si(dict_filter['serial_si'], dict_filter['type_si'])
-
-        if not type(lst_card) == list and not lst_card == None:
-            return lst_card
-        else:
-            if not lst_card == None:
-                logger.info(f"Получено для текущего СИ {len(lst_card)} значений из БД.")
-            else:
-                logger.info(f"Ничего не получено для текущего СИ {serial}")
-        if type(lst_card) == list and len(lst_card) > 0:
-            # Здесь нужно реализовать проверку карточек на все условия:
-            #  - сформировать список карточек в которых дата поверки совпадает, если таких больше одной
-            #  - проверить эти карточки по идентификаторам
-
-            d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
-            if len(d) == 1:
-                res_lst_card = d[list(d.keys())[0]]
-                return res_lst_card
-            else:
-                return list(d.values())
-
-    def check_result_local_request(res_request, coord: tuple, str_verif_date: str):
-        """
-        Функция для проверки результатов запроса к локальной БД
-        и записи ссылки в ячейку, если она найдена
-
-        :param res_request: результаты запроса
-        :return:
-        """
-        if type(res_request) == list:
-            # worksheet.cell(row=coord[0],
-            #                column=coord[1]).value = f"Проверить в ручном режиме. Найдено {len(res_request)} значения(й)"
-            # xlsx.set_fill(worksheet, coord, 'yellow')
-            # worksheet.cell(row=coord[0], column=coord[1]).fill = FillYellow
-            lst_same_date = []
-            for lst in res_request:
-                # Отправляем на проверку полученную из файла строку даты последней поверки
-                # и объект CardFgis по текущему счётчику.
-                # В результате сравниваются две этих даты - если они равны, то True
-                # если не равны, то False
-                if check_verif_date(lst, str_verif_date):
-                    # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
-                    # в список ПУ с одинаковыми датами последней поверки
-                    lst_same_date.append(lst)
-            # Если в результате у нас в списке находится только один счётчик с датой последней поверки
-            # совпадающей с тем, что в файле, то устанавливаем ссылку
-            if len(lst_same_date) == 1:
-                if set_href(lst_same_date[0], coord, str_verif_date, worksheet):
-                    logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
-                    workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
-            # Если в списке счётчиков больше 1, то отправляем список на обработку
-            # и получения единственно верного объекта CardFgis, если такое возможно
-            elif len(lst_same_date) > 1:
-                res_card = lst_same_date_parse(lst_same_date)
-                if set_href(res_card, coord, str_verif_date, worksheet):
-                    workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
-                    logger.info(f"Ссылка для {res_card.mi_number} найдена.")
-        else:
-            # Если тип res_request == CardFgis, то считаем его единственно верным вариантом
-            # и пытаемся записать ссылку на карточку в ячейку
-            if set_href(res_request, coord, str_verif_date, worksheet):
-                logger.info(f"Ссылка для СИ {res_request.mi_number} найдена.")
-
-    def lst_same_date_parse(lst_same_date: list):
-        """
-        Функция для обработки карточек с одинаковыми датами поверки
-
-        :param lst_same_date: список с объектами CardFgis
-        :return: объект CardFgis
-        """
-        tmp_lst_card = {}
-        # for ind, card in enumerate(lst_same_date):
-        #     for i, c in enumerate(lst_same_date[1:]):
-        #         if card.result_docnum[:card.result_docnum.rfind('/')] == c.result_docnum[:c.result_docnum.rfind('/')]:
-        #             tmp_lst_card[ind].append(i)
-        # tmp_lst_card[lst_same_date[0].vri_id] = lst_same_date[0]
-        for ind in range(len(lst_same_date)):
-            try:
-                if lst_same_date[ind].check_equals(lst_same_date[ind + 1]):
-                    tmp_lst_card[lst_same_date[ind].vri_id] = lst_same_date[ind]
-                    tmp_lst_card[lst_same_date[ind + 1].vri_id] = lst_same_date[ind + 1]
-            except IndexError:
-                break
-        keys = {int(item[0][2:]): item[0] for item in tmp_lst_card.items()}
-        max_id = 0
-        for k in list(keys.keys()):
-            if k > max_id:
-                max_id = k
-        return tmp_lst_card[keys[max_id]]
+    # def lst_same_date_parse(lst_same_date: list):
+    #     """
+    #     Функция для обработки карточек с одинаковыми датами поверки
+    #
+    #     :param lst_same_date: список с объектами CardFgis
+    #     :return: объект CardFgis
+    #     """
+    #     tmp_lst_card = {}
+    #     # for ind, card in enumerate(lst_same_date):
+    #     #     for i, c in enumerate(lst_same_date[1:]):
+    #     #         if card.result_docnum[:card.result_docnum.rfind('/')] == c.result_docnum[:c.result_docnum.rfind('/')]:
+    #     #             tmp_lst_card[ind].append(i)
+    #     # tmp_lst_card[lst_same_date[0].vri_id] = lst_same_date[0]
+    #     for ind in range(len(lst_same_date)):
+    #         try:
+    #             if lst_same_date[ind].check_equals(lst_same_date[ind + 1]):
+    #                 tmp_lst_card[lst_same_date[ind].vri_id] = lst_same_date[ind]
+    #                 tmp_lst_card[lst_same_date[ind + 1].vri_id] = lst_same_date[ind + 1]
+    #         except IndexError:
+    #             break
+    #     keys = {int(item[0][2:]): item[0] for item in tmp_lst_card.items()}
+    #     max_id = 0
+    #     for k in list(keys.keys()):
+    #         if k > max_id:
+    #             max_id = k
+    #     return tmp_lst_card[keys[max_id]]
 
     def set_href(card, coord, str_verif_date, worksheet):
         """

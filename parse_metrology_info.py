@@ -526,7 +526,7 @@ def prepare_and_write(response: list, database: localdb.WorkDb, row_number: int 
                         f"Не удалось записать данные в БД <{str(dict_for_write)}>")
 
 
-def local_request(serial, si, year, current_type, verif_date):
+def local_request(serial, si, year, current_type, verif_date, database, verif_year=datetime.now().year, work_mode):
     """
     Обращаемся к локальной БД для получения данных по номеру, типу СИ
     и году поверки
@@ -557,8 +557,12 @@ def local_request(serial, si, year, current_type, verif_date):
         # Здесь нужно реализовать проверку карточек на все условия:
         #  - сформировать список карточек в которых дата поверки совпадает, если таких больше одной
         #  - проверить эти карточки по идентификаторам
+        match work_mode:
+            case 'local':
+                d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'], work_mode)
+            case 'unknow_local':
+                d = parse_list_card(lst_card, dict_filter['type_si'], verif_year, work_mode)
 
-        d = parse_list_card(lst_card, dict_filter['type_si'], dict_filter['verif_date'])
         if len(d) == 1:
             res_lst_card = d[list(d.keys())[0]]
             return res_lst_card
@@ -566,7 +570,7 @@ def local_request(serial, si, year, current_type, verif_date):
             return list(d.values())
 
 
-def parse_list_card(lst, type_si, verif_date):
+def parse_list_card(lst, type_si, verif_date, work_mode):
     """
     Функция для обработки списка объектов CardFgis
 
@@ -579,23 +583,37 @@ def parse_list_card(lst, type_si, verif_date):
 
     res_dict = {}
     date = None
-
-    if type(verif_date) is datetime:
-        date = datetime.strftime(verif_date, '%d.%m.%Y')
-    elif type(verif_date) is str:
-        date = datetime.strptime(verif_date, '%d.%m.%Y')
-    if len(lst) == 1:
-        res_dict[0] = lst[0]
-    else:
-        for ind, card in enumerate(lst):
-            current_type = card.mi_mitype
-            current_mod = card.mi_modification
-            parse_type = TypeParseSi(current_type, type_si)
-            res_parse = parse_type.parse()
-            parse_mod = TypeParseSi(current_mod, type_si)
-            res_parse_mod = parse_mod.parse()
-            if check_true(res_parse) and date == card.verification_date:
-                res_dict[ind] = card
+    match work_mode:
+        case 'local':
+            if type(verif_date) is datetime:
+                date = datetime.strftime(verif_date, '%d.%m.%Y')
+            elif type(verif_date) is str:
+                date = datetime.strptime(verif_date, '%d.%m.%Y')
+            if len(lst) == 1:
+                res_dict[0] = lst[0]
+            else:
+                for ind, card in enumerate(lst):
+                    current_type = card.mi_mitype
+                    current_mod = card.mi_modification
+                    parse_type = TypeParseSi(current_type, type_si)
+                    res_parse = parse_type.parse()
+                    parse_mod = TypeParseSi(current_mod, type_si)
+                    res_parse_mod = parse_mod.parse()
+                    if check_true(res_parse) and date == card.verification_date:
+                        res_dict[ind] = card
+        case 'unknow_local':
+            if len(lst) == 1:
+                res_dict[0] = lst[0]
+            else:
+                for ind, card in enumerate(lst):
+                    current_type = card.mi_mitype
+                    current_mod = card.mi_modification
+                    parse_type = TypeParseSi(current_type, type_si)
+                    res_parse = parse_type.parse()
+                    parse_mod = TypeParseSi(current_mod, type_si)
+                    res_parse_mod = parse_mod.parse()
+                    if check_true(res_parse) and verif_date == card.verification_date.year:
+                        res_dict[ind] = card
 
     return res_dict
 
@@ -710,29 +728,28 @@ def work_on_fgis(**kwargs):
                     request_and_write(current_serial, database, last_verif_year, mitype, current_si)
 
 
-
 def work_on_local(**kwargs):
     """
     Функция для обработки файла локально, без подключения к ФГИС
     """
     # Информация по текущему СИ
-    inform_si = kwargs['inform_si']
-    current_si = kwargs['current_si']
-    current_row = kwargs['current_row']
+    inform_si = kwargs['inform_si'] if 'inform_si' in kwargs else None
+    current_si = kwargs['current_si'] if 'current_si' in kwargs else None
+    current_row = kwargs['current_row'] if 'current_row' in kwargs else None
     # Режим работы
-    work_mode = kwargs['work_mode']
+    work_mode = kwargs['work_mode'] if 'work_mode' in kwargs else None
     # Объект локальной БД
-    database = kwargs['database']
+    database = kwargs['database'] if 'database' in kwargs else None
     # Год следующей поверки
-    valid_year = kwargs['valid_year']
+    valid_year = kwargs['valid_year'] if 'valid_year' in kwargs else None
     # Год последней поверки
-    last_verif_year = kwargs['last_verif_year']
+    last_verif_year = kwargs['last_verif_year'] if 'last_verif_year' in kwargs else None
     # Книга Excel
-    workbook = kwargs['workbook']
+    workbook = kwargs['workbook'] if 'workbook' in kwargs else None
     flag_href_style = inform_si['flag_href_style']
     mitype = inform_si['type']
-    verif_date_col = kwargs['verif_date_col']
-    href_col = kwargs['href_col']
+    verif_date_col = kwargs['verif_date_col'] if 'verif_date_col' in kwargs else None
+    href_col = kwargs['href_col'] if 'href_col' in kwargs else None
 
     match work_mode:
         case 'local':
@@ -742,7 +759,7 @@ def work_on_local(**kwargs):
             # Если ссылки нет, то выполняем запрос
             if not flag_href_style:
                 res_local_request = local_request(inform_si['serial'], current_si, last_verif_year,
-                                                  mitype, str_verif_date)
+                                                  mitype, str_verif_date, database)
                 check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
             else:
                 if database.check_valid_href(href_value):
@@ -755,7 +772,8 @@ def work_on_local(**kwargs):
                         # workbook.set_id_record((current_row, COLUMN_ID), cur_id_record)
                 else:
                     workbook.set_fill((current_row, href_col), 'red_brown')
-
+        case 'unknow_local':
+            res_local_request = local_request(inform_si['serial'], current_si, last_verif_year, mitype)
 
 
 
@@ -764,7 +782,16 @@ def work_on_change_serial(**kwargs):
     """
     Функция работает при выборе режима работы скрипта 'change_serial'
     """
-    pass
+    # Серийный номер
+    current_serial = kwargs['current_serial']
+    # Объект workbook
+    workbook = kwargs['workbook']
+    # Номер столбца с номерами счётчиков
+    serial_col = kwargs['serial_col']
+    current_row = kwargs['current_row']
+    if str(current_serial)[0] == '1':
+        current_serial = '0' + str(current_serial)
+        workbook.set_value((current_row, serial_col), current_serial)
 
 
 def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work_mode: str,
@@ -863,7 +890,13 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                                           current_si=current_si, current_row=current_row, workbook=workbook, href_col=href_col)
                     case 'unknow_local':
                         # Запуск функции для обработки данных по СИ при режиме unknow_local
-                        pass
+                        work_on_local(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
+                                      database=database, current_si=current_si, current_row=current_row,
+                                      workbook=workbook, href_col=href_col, last_verif_year=verif_year)
+                    case 'change_serial':
+                        # Запуск функции work_on_change_serial
+                        work_on_change_serial(current_serial=serial_number, workbook=workbook,
+                                              serial_col=serial_col, current_row=current_row)
 
 
 def main():
@@ -888,19 +921,6 @@ def main():
     start = namespace_argv.START
     namefile_setting = namespace_argv.setfile
 
-
-    # =========================================================================================#
-
-    # # Читаем файл с параметрами подключения к локальной БД
-    # local_db_parameters = read_settings_file(namefile_setting)
-    # # Устанавливаем соединение с БД
-    # database = localdb.WorkDb(database=local_db_parameters['database'],
-    #                           user=local_db_parameters['user'],
-    #                           password=local_db_parameters['password'],
-    #                           port=local_db_parameters['port'],
-    #                           host=local_db_parameters['host'])
-
-    # ==========================================================================================#
 
     # Проверяем введённые параметры на корректность,
     # недопустим режим unknow и год 0
@@ -1125,39 +1145,39 @@ def main():
     #             max_id = k
     #     return tmp_lst_card[keys[max_id]]
 
-    def set_href(card, coord, str_verif_date, worksheet):
-        """
-        Функция для записи гиперссылки по СИ в ячейку
-
-        :param card: объект CardFgis с информацией по СИ
-        :param coord: кортеж с коордиинатами ячейки для записи
-        :param str_verif_date: строка даты последней поверки
-        :param worksheet:
-        :return: True or False
-        """
-        if not card == None:
-            verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
-            date_current_card = verif_date_current_card.date()
-            if type(str_verif_date) == datetime:
-                date_verif_current_row = str_verif_date.date()
-            elif type(str_verif_date) == str:
-                date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
-            if date_verif_current_row == date_current_card:
-                href = card.href
-
-                if not workbook.check_merged(coord):
-                    workbook.set_href(coord, href)
-                    workbook.set_fill(coord, 'green')
-                    return True
-            else:
-                href = card.href
-                workbook.set_href(coord, href)
-                workbook.set_fill(coord, 'red')
-                workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
-                return False
-        else:
-            workbook.set_fill(coord, 'blue')
-            return False
+    # def set_href(card, coord, str_verif_date, worksheet):
+    #     """
+    #     Функция для записи гиперссылки по СИ в ячейку
+    #
+    #     :param card: объект CardFgis с информацией по СИ
+    #     :param coord: кортеж с коордиинатами ячейки для записи
+    #     :param str_verif_date: строка даты последней поверки
+    #     :param worksheet:
+    #     :return: True or False
+    #     """
+    #     if not card == None:
+    #         verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
+    #         date_current_card = verif_date_current_card.date()
+    #         if type(str_verif_date) == datetime:
+    #             date_verif_current_row = str_verif_date.date()
+    #         elif type(str_verif_date) == str:
+    #             date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
+    #         if date_verif_current_row == date_current_card:
+    #             href = card.href
+    #
+    #             if not workbook.check_merged(coord):
+    #                 workbook.set_href(coord, href)
+    #                 workbook.set_fill(coord, 'green')
+    #                 return True
+    #         else:
+    #             href = card.href
+    #             workbook.set_href(coord, href)
+    #             workbook.set_fill(coord, 'red')
+    #             workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
+    #             return False
+    #     else:
+    #         workbook.set_fill(coord, 'blue')
+    #         return False
 
     # def prepare_and_write(response: list, row_number: int = 0):
     #     """
@@ -1371,7 +1391,7 @@ def main():
                             continue
                         elif str(current_serial)[0] == '1':
                             current_serial = '0' + str(current_serial)
-                            workbook._write_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
+                            workbook.set_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
             elif verif_year != last_verif_year and verif_year == valid_year:
                 logger.info(f"Пропускаем строку {current_row}, так как не совпадает год.")
 

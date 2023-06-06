@@ -493,6 +493,12 @@ class XlsxFile:
         current_cell.value = f"{id_record}"
         current_cell.protection = Protection(hidden=True)
 
+    def set_value(self, coord: tuple, value):
+        """
+        Метод для записи значения в ячейку с координатами
+        """
+        self._write_value(coord, value)
+
     def check_merged(self, coord: tuple):
         """
         Проверка диапазона ячеек на объединение

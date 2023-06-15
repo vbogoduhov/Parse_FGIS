@@ -14,7 +14,6 @@ import app_logger
 logger = app_logger.get_logger(__name__, 'localdb_log.log')
 output_data_metrology = app_logger.get_logger('Data_from_metrology', 'localdb_log.log')
 
-
 class WorkDb:
     MODE_CHECK = {'title': 'tbtitle',
                   'modification': 'tbmodification',
@@ -922,17 +921,37 @@ class CardFgis:
         :param other_card: объект CardFgis
         :return: True or False
         """
-        if (self.mi_mitnumber == other_card.mi_mitnumber and
-                self.mi_modification == other_card.mi_modification and
-                self.result_docnum[:self.result_docnum.rfind('/')] == other_card.result_docnum[
-                                                                      :other_card.result_docnum.rfind('/')] and
-                self.mi_mitype == other_card.mi_mitype and
-                self.mi_mititle == other_card.mi_mititle and
-                self.org_title == other_card.org_title and
-                self.verification_date == other_card.verification_date):
-            return True
+        if self.mi_modification == other_card.mi_modification:
+            if (self.mi_mitnumber == other_card.mi_mitnumber and
+                    self.mi_modification == other_card.mi_modification and
+                    self.result_docnum[:self.result_docnum.rfind('/')] == other_card.result_docnum[
+                                                                          :other_card.result_docnum.rfind('/')] and
+                    self.mi_mitype == other_card.mi_mitype and
+                    self.mi_mititle == other_card.mi_mititle and
+                    self.org_title == other_card.org_title and
+                    self.verification_date == other_card.verification_date):
+                return True
+            else
+                return False
         else:
-            return False
+            if (self.mi_mitnumber == other_card.mi_mitnumber and
+                    self.result_docnum[:self.result_docnum.rfind('/')] == other_card.result_docnum[
+                                                                          :other_card.result_docnum.rfind('/')] and
+                    self.mi_mitype == other_card.mi_mitype and
+                    self.mi_mititle == other_card.mi_mititle and
+                    self.org_title == other_card.org_title and
+                    self.verification_date == other_card.verification_date):
+                return True
+            else
+                return False
+
+    def check_equals_full(self, other):
+        """
+        Метод для сравнения двух карточек по полному списку параметров.
+        Должен возвращать словарь с количеством параметров, по которым расхождения,
+        а так же список этих параметров
+        """
+        pass
 
 
 def main():

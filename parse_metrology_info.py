@@ -81,6 +81,7 @@ EXC_STR = ['',
            'н/д',
            'нет данных',
            'отсутствует',
+           'брак',
            None]
 
 
@@ -97,22 +98,22 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--serial', type=str, default='', help='Конкретный номер СИ для поиска в БД FGIS')
     parser.add_argument('-n', '--namefile', type=str,
-                        default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г.  итог 2 кв..xlsx",
+                        default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023_for_test.xlsx",
                         help='Имя файла Excel для обработки')
-    parser.add_argument('-y', '--years', type=int, default=0,
+    parser.add_argument('-y', '--years', type=int, default=2021,
                         help='Год поверки СИ для выборки')
-    parser.add_argument('-k', '--keyword', type=str, default='ТТ ТН',
+    parser.add_argument('-k', '--keyword', type=str, default='ПУ',
                         help="СИ по которому нужно получить данные из ФГИС или локальной БД: "
                              "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения."
                              "Можно вводить несколько, в таком случае значения должны быть разделена пробелом,"
                              "например: <ТТ ТН> или <ТН ПУ ТТ>")
-    parser.add_argument('-m', '--mode', type=str, default='unknow', help="Режим запуска скрипта: "
+    parser.add_argument('-m', '--mode', type=str, default='local', help="Режим запуска скрипта: "
                                                                        "fgis - для сбора данных из БД ФГИС,"
                                                                        "local - для локальной работы и заполнения файла Excel,"
                                                                        "unknow - когда неизвестен год последней поверки, и нужно проверить СИ"
                                                                        "по годам, начиная с известного года последней поверки,"
                                                                        "change_serial - для добавления 0 вначале номера для ЕвроАльфа")
-    parser.add_argument('--START', type=int, default=13, help='Начальная строка')
+    parser.add_argument('--START', type=int, default=274, help='Начальная строка')
     parser.add_argument('-cfg', '--setfile', type=str, default='settings.ini',
                         help='Файл с настройками подключения к локальной БД')
     logger.info("Парсинг параметров командной строки закончен")
@@ -323,26 +324,32 @@ def check_dict_for_write(dict_for_write, database):
         return dict_for_write
 
 
-def check_verif_date(card: localdb.CardFgis, last_verif_date: str):
+def check_verif_date(card: localdb.CardFgis, work_mode,
+                     last_verif_date: str = None, verif_year: int = datetime.now().year):
     """
     Функция для сверки даты последней поверки текущего СИ
-    и даты послдней поверки, полученной из ФГИС
+    и даты последней поверки, полученной из ФГИС
 
     :param card: объект CardFgis
     :param last_verif_date: дата последней поверки текущего СИ, полученная из файла
     :return: True or False
     """
-    card_last_verif_date = datetime.strptime(card.verification_date, "%d.%m.%Y")
-    if type(last_verif_date) == str:
-        tmp_verif_date = datetime.strptime(last_verif_date, "%d.%m.%Y")
-    else:
-        tmp_verif_date = last_verif_date
+    match work_mode:
+        case 'local':
+            card_last_verif_date = datetime.strptime(card.verification_date, "%d.%m.%Y")
+            if type(last_verif_date) == str:
+                tmp_verif_date = datetime.strptime(last_verif_date, "%d.%m.%Y")
+            else:
+                tmp_verif_date = last_verif_date
 
-    if card_last_verif_date == tmp_verif_date:
-        return True
-    else:
-        return False
-
+            if card_last_verif_date == tmp_verif_date:
+                return True
+            else:
+                return False
+        case 'unknow_local':
+            card_last_verif_year = datetime.strptime(card.verification_date, "%d.%m.%Y").year
+            if type(verif_year) is int:
+                return True if verif_year == card_last_verif_year else False
 
 def pass_to_si_list(keywords: str):
     """
@@ -395,46 +402,69 @@ def check_response(response: list[dict]):
         return -1
 
 
-def check_result_local_request(res_request, coord: tuple, str_verif_date: str, workbook):
+def check_result_local_request(res_request, coord: tuple, workbook, work_mode, str_verif_date: str = None, verif_year: int = datetime.now().year):
     """
     Функция для проверки результатов запроса к локальной БД
     и записи ссылки в ячейку, если она найдена
 
     :param res_request: результаты запроса
-    :return:
+    :param coord: координаты ячейки, для вставки гиперссылки
+    :param str_verif_date: дата последней поверки в формате строки
+    :param workbook: объект книги Excel xlsx.XlsxFile
+    :param work_mode: режим работы скрипта в формате строки
+    :param verif_year: год последней поверки для режима unknow_local
+    :return: None
     """
     if type(res_request) == list:
-        # worksheet.cell(row=coord[0],
-        #                column=coord[1]).value = f"Проверить в ручном режиме. Найдено {len(res_request)} значения(й)"
-        # xlsx.set_fill(worksheet, coord, 'yellow')
-        # worksheet.cell(row=coord[0], column=coord[1]).fill = FillYellow
-        lst_same_date = []
-        for lst in res_request:
-            # Отправляем на проверку полученную из файла строку даты последней поверки
-            # и объект CardFgis по текущему счётчику.
-            # В результате сравниваются две этих даты - если они равны, то True
-            # если не равны, то False
-            if check_verif_date(lst, str_verif_date):
-                # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
-                # в список ПУ с одинаковыми датами последней поверки
-                lst_same_date.append(lst)
-        # Если в результате у нас в списке находится только один счётчик с датой последней поверки
-        # совпадающей с тем, что в файле, то устанавливаем ссылку
-        if len(lst_same_date) == 1:
-            if set_href(lst_same_date[0], coord, str_verif_date, worksheet):
-                logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
-                workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
-        # Если в списке счётчиков больше 1, то отправляем список на обработку
-        # и получения единственно верного объекта CardFgis, если такое возможно
-        elif len(lst_same_date) > 1:
-            res_card = lst_same_date_parse(lst_same_date)
-            if set_href(res_card, coord, str_verif_date, worksheet):
-                workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
-                logger.info(f"Ссылка для {res_card.mi_number} найдена.")
+        match work_mode:
+            case 'local':
+                lst_same_date = []
+                for lst in res_request:
+                    # Отправляем на проверку полученную из файла строку даты последней поверки
+                    # и объект CardFgis по текущему счётчику.
+                    # В результате сравниваются две этих даты - если они равны, то True
+                    # если не равны, то False
+                    if check_verif_date(lst, work_mode, last_verif_date=str_verif_date):
+                        # Если даты из файла и из объекта CardFgis равны, то добавляем этот счётчик
+                        # в список ПУ с одинаковыми датами последней поверки
+                        lst_same_date.append(lst)
+                # Если в результате у нас в списке находится только один счётчик с датой последней поверки
+                # совпадающей с тем, что в файле, то устанавливаем ссылку
+                if len(lst_same_date) == 1:
+                    if set_href(lst_same_date[0], coord, workbook, str_verif_date=str_verif_date):
+                        logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
+                        workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
+                # Если в списке счётчиков больше 1, то отправляем список на обработку
+                # и получения единственно верного объекта CardFgis, если такое возможно
+                elif len(lst_same_date) > 1:
+                    res_card = lst_same_date_parse(lst_same_date)
+                    if set_href(res_card, coord, workbook, str_verif_date=str_verif_date):
+                        workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
+                        logger.info(f"Ссылка для {res_card.mi_number} найдена.")
+            case 'unknow_local':
+                lst_same_date = []
+                for lst in res_request:
+                    # Отправляем на проверку полученный из файла год последней поверки
+                    # и объект CardFgis по текущему счётчику
+                    # Если годы равны - True, если нет - False
+                    if check_verif_date(lst, work_mode, verif_year=verif_year):
+                        lst_same_date.append(lst)
+                if len(lst_same_date) == 1:
+                    if set_href(lst_same_date[0], coord, workbook, work_mode=work_mode, verif_year=verif_year):
+                        logger.info(f"Ссылка для СИ {lst_same_date[0].mi_number} найдена.")
+                        workbook.set_id_record((coord[0], COLUMN_ID), lst_same_date[0].id_record)
+                # Если в списке счётчиков больше 1, то отправляем список на обработку
+                # и получения единственно верного объекта CardFgis, если такое возможно
+                elif len(lst_same_date) > 1:
+                    # res_card = lst_same_date_parse(lst_same_date)
+                    # if set_href(res_card, coord, workbook, work_mode=work_mode, verif_year=verif_year):
+                    #     workbook.set_id_record((coord[0], COLUMN_ID), res_card.id_record)
+                    #     logger.info(f"Ссылка для СИ {res_card.mi_number} найдена.")
+                    workbook.set_fill(coord, 'yellow')
     else:
         # Если тип res_request == CardFgis, то считаем его единственно верным вариантом
         # и пытаемся записать ссылку на карточку в ячейку
-        if set_href(res_request, coord, str_verif_date, worksheet):
+        if set_href(res_request, coord, workbook, work_mode=work_mode, str_verif_date=str_verif_date, verif_year=verif_year):
             logger.info(f"Ссылка для СИ {res_request.mi_number} найдена.")
 
 
@@ -466,36 +496,55 @@ def lst_same_date_parse(lst_same_date: list):
     return tmp_lst_card[keys[max_id]]
 
 
-def set_href(card, coord, str_verif_date, workbook):
+def set_href(card, coord, workbook, work_mode='local', str_verif_date=None, verif_year=datetime.now().year):
     """
     Функция для записи гиперссылки по СИ в ячейку
 
     :param card: объект CardFgis с информацией по СИ
     :param coord: кортеж с коордиинатами ячейки для записи
     :param str_verif_date: строка даты последней поверки
-    :param worksheet:
+    :param workbook: объект xlsx.XlsxFile - книга Excel
+    :param work_mode: режим работы скрипта - 'local', 'unknow_local'
+    :param verif_year: год последней поверки СИ - при режиме 'unknow_local'
     :return: True or False
     """
     if not card == None:
-        verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
-        date_current_card = verif_date_current_card.date()
-        if type(str_verif_date) == datetime:
-            date_verif_current_row = str_verif_date.date()
-        elif type(str_verif_date) == str:
-            date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
-        if date_verif_current_row == date_current_card:
-            href = card.href
+        match work_mode:
+            case 'local':
+                # Получаем дату последней поверки по текущему СИ из объекта CardFgis
+                verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
+                date_current_card = verif_date_current_card.date()
+                date_verif_current_row = None
 
-            if not workbook.check_merged(coord):
-                workbook.set_href(coord, href)
-                workbook.set_fill(coord, 'green')
-                return True
-        else:
-            href = card.href
-            workbook.set_href(coord, href)
-            workbook.set_fill(coord, 'red')
-            workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
-            return False
+                if type(str_verif_date) == datetime:
+                    date_verif_current_row = str_verif_date.date()
+                elif type(str_verif_date) == str:
+                    date_verif_current_row = datetime.strptime(str_verif_date, "%d.%m.%Y")
+                if date_verif_current_row == date_current_card:
+                    href = card.href
+                    if not workbook.check_merged(coord):
+                        workbook.set_href(coord, href)
+                        workbook.set_fill(coord, 'green')
+                        return True
+                else:
+                    href = card.href
+                    workbook.set_href(coord, href)
+                    workbook.set_fill(coord, 'red')
+                    workbook.set_date((coord[0], coord[1] - 2), card.verification_date)
+                    return False
+            case 'unknow_local':
+                verif_date_current_card = datetime.strptime(card.verification_date, "%d.%m.%Y")
+                year_current_card = verif_date_current_card.date().year
+
+                if year_current_card == verif_year:
+                    href = card.href
+                    if not workbook.check_merged(coord):
+                        workbook.set_href(coord, href)
+                        workbook.set_fill(coord, 'green')
+                        return True
+                else:
+                    return False
+
     else:
         workbook.set_fill(coord, 'blue')
         return False
@@ -526,7 +575,7 @@ def prepare_and_write(response: list, database: localdb.WorkDb, row_number: int 
                         f"Не удалось записать данные в БД <{str(dict_for_write)}>")
 
 
-def local_request(serial, si, year, current_type, verif_date, database, verif_year=datetime.now().year, work_mode):
+def local_request(serial, si, year, current_type, database, work_mode, verif_year=datetime.now().year, verif_date=None):
     """
     Обращаемся к локальной БД для получения данных по номеру, типу СИ
     и году поверки
@@ -612,7 +661,7 @@ def parse_list_card(lst, type_si, verif_date, work_mode):
                     res_parse = parse_type.parse()
                     parse_mod = TypeParseSi(current_mod, type_si)
                     res_parse_mod = parse_mod.parse()
-                    if check_true(res_parse) and verif_date == card.verification_date.year:
+                    if check_true(res_parse) and check_verif_date(card, work_mode, verif_year=verif_date):
                         res_dict[ind] = card
 
     return res_dict
@@ -650,6 +699,7 @@ def work_on_fgis(**kwargs):
     # Объект локально БД - localdb.WorkDb
     database = kwargs['database']
     current_si = kwargs['current_si']
+    current_row = kwargs['current_row']
     # # Перечень видов СИ для обработки
     # keywords_si = kwargs['keywords_si']
     #
@@ -687,7 +737,6 @@ def work_on_fgis(**kwargs):
             # Если ничего не получено на запрос, ничего и не обрабатываем
             case -1:
                 logger.info(f"Для номера СИ - {current_serial}, по запросу к ФГИС ничего не получено")
-                continue
 
     # Проверка режима работы
     match work_mode:
@@ -750,6 +799,7 @@ def work_on_local(**kwargs):
     mitype = inform_si['type']
     verif_date_col = kwargs['verif_date_col'] if 'verif_date_col' in kwargs else None
     href_col = kwargs['href_col'] if 'href_col' in kwargs else None
+    href_value = inform_si['href_value']
 
     match work_mode:
         case 'local':
@@ -759,8 +809,8 @@ def work_on_local(**kwargs):
             # Если ссылки нет, то выполняем запрос
             if not flag_href_style:
                 res_local_request = local_request(inform_si['serial'], current_si, last_verif_year,
-                                                  mitype, str_verif_date, database)
-                check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
+                                                  mitype, database, work_mode, verif_date=str_verif_date)
+                check_result_local_request(res_local_request, (current_row, href_col), workbook, work_mode, str_verif_date=str_verif_date)
             else:
                 if database.check_valid_href(href_value):
                     cur_id_record = database.get_id_for_href(href_value)
@@ -773,7 +823,8 @@ def work_on_local(**kwargs):
                 else:
                     workbook.set_fill((current_row, href_col), 'red_brown')
         case 'unknow_local':
-            res_local_request = local_request(inform_si['serial'], current_si, last_verif_year, mitype)
+            res_local_request = local_request(inform_si['serial'], current_si, last_verif_year, mitype, database, work_mode)
+            check_result_local_request(res_local_request, (current_row, href_col), workbook, work_mode, verif_year=last_verif_year)
 
 
 
@@ -826,7 +877,7 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
     row_end = worksheet.max_row
 
     # Инициализация прогрессбара
-    bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (
+    bar = IncrementalBar('Выполнение: ', max=(row_end - start_row) * len(keyword_si.split(sep=" ")) + (
             1 * len(keyword_si.split(sep=" "))))
 
     # Основной цикл по видам СИ
@@ -872,7 +923,7 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                         if verif_year == 0 and valid_year != None:
                             work_on_fgis(work_mode=work_mode, serial=serial_number,
                                          inform_si=inform_si, database=database,
-                                         valid_year=valid_year, last_verif_year=last_verif_year, current_si=current_si)
+                                         valid_year=valid_year, last_verif_year=last_verif_year, current_si=current_si, current_row=current_row)
                         else:
                             logger.warning(f"Условия для запуска обработки СИ по всем годам не соответствуют требуемым."
                                            f"{verif_year = }, {valid_year = }")
@@ -880,23 +931,26 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                         # Запуск функции для обработки данных по СИ при режиме fgis
                         work_on_fgis(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
                                      database=database, valid_year=valid_year, last_verif_year=last_verif_year,
-                                     current_si=current_si)
+                                     current_si=current_si, current_row=current_row)
 
                     case 'local':
                         # Запуск функции для обработки данных по СИ при режиме local
                         if verif_year == last_verif_year:
                             work_on_local(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
                                           database=database, valid_year=valid_year, last_verif_year=last_verif_year,
-                                          current_si=current_si, current_row=current_row, workbook=workbook, href_col=href_col)
+                                          current_si=current_si, current_row=current_row, workbook=workbook, href_col=href_col, verif_date_col=verif_date_col)
                     case 'unknow_local':
                         # Запуск функции для обработки данных по СИ при режиме unknow_local
-                        work_on_local(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
-                                      database=database, current_si=current_si, current_row=current_row,
-                                      workbook=workbook, href_col=href_col, last_verif_year=verif_year)
+                        if verif_year != last_verif_year:
+                            work_on_local(work_mode=work_mode, serial=serial_number, inform_si=inform_si,
+                                          database=database, current_si=current_si, current_row=current_row,
+                                          workbook=workbook, href_col=href_col, last_verif_year=verif_year)
                     case 'change_serial':
                         # Запуск функции work_on_change_serial
                         work_on_change_serial(current_serial=serial_number, workbook=workbook,
                                               serial_col=serial_col, current_row=current_row)
+    workbook.save()
+    bar.finish()
 
 
 def main():
@@ -963,22 +1017,22 @@ def main():
     # worksheet = workbook.active_sheet
     # row_end = worksheet.max_row
 
-    def check_si_on_localdb(si_inform: dict):
-        """
-        Проверяем наличие в локальной БД информации по текущему СИ
-
-        :param si_inform: словарь с данными по СИ:
-                            'serial' - серийный номер СИ,
-                            'type' - тип СИ,
-                            'verif_date' - дата поверки
-        :return: True or False
-        """
-        # Получаем из словаря серийный номер
-        # тип СИ, дату поверки и пытаемся получить из БД данные
-        # по этим данным
-        serial = si_inform['serial']
-        type = si_inform['type']
-        verif_date = si_inform['verif_date']
+    # def check_si_on_localdb(si_inform: dict):
+    #     """
+    #     Проверяем наличие в локальной БД информации по текущему СИ
+    #
+    #     :param si_inform: словарь с данными по СИ:
+    #                         'serial' - серийный номер СИ,
+    #                         'type' - тип СИ,
+    #                         'verif_date' - дата поверки
+    #     :return: True or False
+    #     """
+    #     # Получаем из словаря серийный номер
+    #     # тип СИ, дату поверки и пытаемся получить из БД данные
+    #     # по этим данным
+    #     serial = si_inform['serial']
+    #     type = si_inform['type']
+    #     verif_date = si_inform['verif_date']
 
     # def check_true(dct):
     #     lst = list(dct.values())
@@ -989,20 +1043,20 @@ def main():
     #
     #     return True if count > 0 else False
 
-    def fgis_request(request_parameters: dict):
-        """
-        Функция для отправки параметров для запроса во ФГИС и
-        обработки результатов запроса
-        :param request_parameters: словарь с параметрами
-        :return:
-        """
-        dict_request = format_dict_requests(title=request_parameters['current_si'],
-                                            number=request_parameters['current_serial'],
-                                            verif_year=request_parameters['last_verif_year'],
-                                            mitype=request_parameters['mitype'],
-                                            rows=str(100))
-        response = fgis_eapi.request_fgis(dict_request)
-        return response
+    # def fgis_request(request_parameters: dict):
+    #     """
+    #     Функция для отправки параметров для запроса во ФГИС и
+    #     обработки результатов запроса
+    #     :param request_parameters: словарь с параметрами
+    #     :return:
+    #     """
+    #     dict_request = format_dict_requests(title=request_parameters['current_si'],
+    #                                         number=request_parameters['current_serial'],
+    #                                         verif_year=request_parameters['last_verif_year'],
+    #                                         mitype=request_parameters['mitype'],
+    #                                         rows=str(100))
+    #     response = fgis_eapi.request_fgis(dict_request)
+    #     return response
 
     # def parse_list_card(lst, type_si, verif_date):
     #     """
@@ -1271,132 +1325,132 @@ def main():
             print(f"Запуск work_on_change_serial для режима работы {mode}")
             # work_on_change_serial()
     # ============================================================================#
-    bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (
-                1 * len(keyword_si.split(sep=" "))))
+    # bar = IncrementalBar('Выполнение: ', max=(row_end - START_ROW) * len(keyword_si.split(sep=" ")) + (
+    #             1 * len(keyword_si.split(sep=" "))))
 
     # Основной цикл прохода по введённым СИ
-    for current_si in keyword_si.split(sep=" "):
-        # Нужно получить номера столбцов для соответствующего вида СИ
-        # Столбец типа СИ
-        type_col = COLUMNS_SI[current_si]['type']
-        # Столбец серийного номера СИ
-        serial_col = COLUMNS_SI[current_si]['serial']
-        # Столбец даты последней поверки
-        verif_date_col = COLUMNS_SI[current_si]['verif_date']
-        # Столбец даты следующей поверки
-        valid_date_col = COLUMNS_SI[current_si]['valid_date']
-        # Столбец для ссылки на корточку СИ
-        href_col = COLUMNS_SI[current_si]['href']
-        logger.info(f"Начинаем обход строк файла для вида СИ: {current_si}")
-
-        for current_row in range(START_ROW, row_end + 1):
-            bar.next()
-            inform_si = workbook.get_inform_si(current_si, current_row)
-            logger.info(f"Дата последней поверки для {current_si} и строки №{current_row} - {inform_si['verif_date']}")
-
-            # Пытаемся получить год поверки из полученной строки
-            # даты последней поверки, если значение ячейки не соответствует
-            # исключениям в словаре
-
-            if inform_si['verif_date'] is None:
-                last_verif_year = None
-                valid_year = None
-            else:
-                last_verif_year = inform_si['verif_date'].year
-                # print(type(inform_si['valid_date']))
-                if type(inform_si['valid_date']) is date:
-                    valid_year = inform_si['valid_date'].year
-                else:
-                    # print(f"type: {type(inform_si['valid_date'])}, type_verif: {type(inform_si['verif_date'])}")
-                    # print(type(inform_si['valid_date']) == date)
-                    valid_year = None
-
-            # Проверяем год для обработки из параметров скрипта
-            # для дальнейших действий
-            if verif_year == 0 and valid_year != None:
-                # Действия для проверки СИ по всем годам,
-                # начиная с года последней поверки и до текущего года
-                current_serial = inform_si['serial']
-                mitype = inform_si['type']
-                if current_serial != None and mitype != None and last_verif_year != None:
-                    # change_date = database.get_change_date()
-                    # Цикл по годам текущего СИ
-                    for year in range(last_verif_year, datetime.now().year + 1):
-                        fgis_request({'current_si': current_si,
-                                      'current_serial': current_serial,
-                                      'last_verif_year': last_verif_year,
-                                      'mitype': mitype})
-            elif verif_year == last_verif_year:
-                # Действия для проверки по конкретному году
-                current_serial = inform_si['serial']
-                mitype = inform_si['type']
-                flag_href_style = inform_si['flag_href_style']
-                href_value = inform_si['href_value']
-                id_record = inform_si['id']
-
-                # Провряем режим работы и выбираем стезю...блядь
-                match mode:
-                    case 'fgis':
-                        if serial != '' and serial != current_serial:
-                            logger.info(
-                                f"Задан конкретный номер СИ для поиска - {serial}. Текущий номер СИ - {current_serial}"
-                                f" не совпадает с введённым, пропускаем его.")
-                        else:
-                            logger.info(f"Готовим запрос в БД ФГИС по СИ - {current_si}, №{current_serial}")
-                            response = fgis_request({'current_si': current_si,
-                                                     'current_serial': current_serial,
-                                                     'last_verif_year': last_verif_year,
-                                                     'mitype': mitype})
-                            # Проверяем результаты запроса, получено ли вообще что-нибудь
-                            # Если количество элементов списка в ответе больше 0, то есть
-                            # что-то получили
-                            if len(response) > 0:
-                                logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
-                                if len(response) > 1:
-                                    prepare_and_write(response, 0)
-                                elif len(response) == 1:
-                                    prepare_and_write(response, current_row)
-
-                    case 'local':
-                        str_verif_date = workbook.get_value((current_row, verif_date_col))
-
-                        if not flag_href_style:
-                            # Ссылки нет
-                            # не забыть про идентификатор записи в БД и номер строки файла
-                            # ...
-                            # ...
-                            # ...
-                            res_local_request = local_request(current_serial, current_si, last_verif_year, mitype,
-                                                              str_verif_date)
-                            check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
-                        else:
-                            # Проверить валидность гиперссылки для начала
-                            # Если ссылка валидна, то выделить одним цветом, если нет, то другим
-                            # Учесть номер идентификатор записи и номер строки в БД
-                            # ...
-                            # ...
-                            # ...
-                            if database.check_valid_href(href_value):
-                                cur_id_record = database.get_id_for_href(href_value)
-                                if not id_record is None:
-                                    if cur_id_record == id_record:
-                                        workbook.set_fill((current_row, href_col), 'orange')
-                                else:
-                                    workbook.set_fill((current_row, href_col), 'orange')
-                                    # workbook.set_id_record((current_row, COLUMN_ID), cur_id_record)
-                            else:
-                                workbook.set_fill((current_row, href_col), 'red_brown')
-                    case 'change_serial':
-                        if str(current_serial)[0] == '0':
-                            continue
-                        elif str(current_serial)[0] == '1':
-                            current_serial = '0' + str(current_serial)
-                            workbook.set_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
-            elif verif_year != last_verif_year and verif_year == valid_year:
-                logger.info(f"Пропускаем строку {current_row}, так как не совпадает год.")
-
-    workbook.save()
-    bar.finish()
+    # for current_si in keyword_si.split(sep=" "):
+    #     # Нужно получить номера столбцов для соответствующего вида СИ
+    #     # Столбец типа СИ
+    #     type_col = COLUMNS_SI[current_si]['type']
+    #     # Столбец серийного номера СИ
+    #     serial_col = COLUMNS_SI[current_si]['serial']
+    #     # Столбец даты последней поверки
+    #     verif_date_col = COLUMNS_SI[current_si]['verif_date']
+    #     # Столбец даты следующей поверки
+    #     valid_date_col = COLUMNS_SI[current_si]['valid_date']
+    #     # Столбец для ссылки на корточку СИ
+    #     href_col = COLUMNS_SI[current_si]['href']
+    #     logger.info(f"Начинаем обход строк файла для вида СИ: {current_si}")
+    #
+    #     for current_row in range(START_ROW, row_end + 1):
+    #         bar.next()
+    #         inform_si = workbook.get_inform_si(current_si, current_row)
+    #         logger.info(f"Дата последней поверки для {current_si} и строки №{current_row} - {inform_si['verif_date']}")
+    #
+    #         # Пытаемся получить год поверки из полученной строки
+    #         # даты последней поверки, если значение ячейки не соответствует
+    #         # исключениям в словаре
+    #
+    #         if inform_si['verif_date'] is None:
+    #             last_verif_year = None
+    #             valid_year = None
+    #         else:
+    #             last_verif_year = inform_si['verif_date'].year
+    #             # print(type(inform_si['valid_date']))
+    #             if type(inform_si['valid_date']) is date:
+    #                 valid_year = inform_si['valid_date'].year
+    #             else:
+    #                 # print(f"type: {type(inform_si['valid_date'])}, type_verif: {type(inform_si['verif_date'])}")
+    #                 # print(type(inform_si['valid_date']) == date)
+    #                 valid_year = None
+    #
+    #         # Проверяем год для обработки из параметров скрипта
+    #         # для дальнейших действий
+    #         if verif_year == 0 and valid_year != None:
+    #             # Действия для проверки СИ по всем годам,
+    #             # начиная с года последней поверки и до текущего года
+    #             current_serial = inform_si['serial']
+    #             mitype = inform_si['type']
+    #             if current_serial != None and mitype != None and last_verif_year != None:
+    #                 # change_date = database.get_change_date()
+    #                 # Цикл по годам текущего СИ
+    #                 for year in range(last_verif_year, datetime.now().year + 1):
+    #                     fgis_request({'current_si': current_si,
+    #                                   'current_serial': current_serial,
+    #                                   'last_verif_year': last_verif_year,
+    #                                   'mitype': mitype})
+    #         elif verif_year == last_verif_year:
+    #             # Действия для проверки по конкретному году
+    #             current_serial = inform_si['serial']
+    #             mitype = inform_si['type']
+    #             flag_href_style = inform_si['flag_href_style']
+    #             href_value = inform_si['href_value']
+    #             id_record = inform_si['id']
+    #
+    #             # Провряем режим работы и выбираем стезю...блядь
+    #             match mode:
+    #                 case 'fgis':
+    #                     if serial != '' and serial != current_serial:
+    #                         logger.info(
+    #                             f"Задан конкретный номер СИ для поиска - {serial}. Текущий номер СИ - {current_serial}"
+    #                             f" не совпадает с введённым, пропускаем его.")
+    #                     else:
+    #                         logger.info(f"Готовим запрос в БД ФГИС по СИ - {current_si}, №{current_serial}")
+    #                         response = fgis_request({'current_si': current_si,
+    #                                                  'current_serial': current_serial,
+    #                                                  'last_verif_year': last_verif_year,
+    #                                                  'mitype': mitype})
+    #                         # Проверяем результаты запроса, получено ли вообще что-нибудь
+    #                         # Если количество элементов списка в ответе больше 0, то есть
+    #                         # что-то получили
+    #                         if len(response) > 0:
+    #                             logger.info(f"Ок, получили данные для номера СИ - {current_serial}")
+    #                             if len(response) > 1:
+    #                                 prepare_and_write(response, 0)
+    #                             elif len(response) == 1:
+    #                                 prepare_and_write(response, current_row)
+    #
+    #                 case 'local':
+    #                     str_verif_date = workbook.get_value((current_row, verif_date_col))
+    #
+    #                     if not flag_href_style:
+    #                         # Ссылки нет
+    #                         # не забыть про идентификатор записи в БД и номер строки файла
+    #                         # ...
+    #                         # ...
+    #                         # ...
+    #                         res_local_request = local_request(current_serial, current_si, last_verif_year, mitype,
+    #                                                           str_verif_date)
+    #                         check_result_local_request(res_local_request, (current_row, href_col), str_verif_date)
+    #                     else:
+    #                         # Проверить валидность гиперссылки для начала
+    #                         # Если ссылка валидна, то выделить одним цветом, если нет, то другим
+    #                         # Учесть номер идентификатор записи и номер строки в БД
+    #                         # ...
+    #                         # ...
+    #                         # ...
+    #                         if database.check_valid_href(href_value):
+    #                             cur_id_record = database.get_id_for_href(href_value)
+    #                             if not id_record is None:
+    #                                 if cur_id_record == id_record:
+    #                                     workbook.set_fill((current_row, href_col), 'orange')
+    #                             else:
+    #                                 workbook.set_fill((current_row, href_col), 'orange')
+    #                                 # workbook.set_id_record((current_row, COLUMN_ID), cur_id_record)
+    #                         else:
+    #                             workbook.set_fill((current_row, href_col), 'red_brown')
+    #                 case 'change_serial':
+    #                     if str(current_serial)[0] == '0':
+    #                         continue
+    #                     elif str(current_serial)[0] == '1':
+    #                         current_serial = '0' + str(current_serial)
+    #                         workbook.set_value((current_row, COLUMNS_SI[current_si]['serial']), current_serial)
+    #         elif verif_year != last_verif_year and verif_year == valid_year:
+    #             logger.info(f"Пропускаем строку {current_row}, так как не совпадает год.")
+    #
+    # workbook.save()
+    # bar.finish()
 
 
 if __name__ == "__main__":

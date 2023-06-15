@@ -10,6 +10,7 @@
 import os.path
 import psycopg2 as psql
 import app_logger
+import localdb
 
 logger = app_logger.get_logger(__name__, 'localdb_log.log')
 output_data_metrology = app_logger.get_logger('Data_from_metrology', 'localdb_log.log')
@@ -914,6 +915,14 @@ class CardFgis:
         """
         return self.__card[self.IND_PROP['number_rows']]
 
+    def check_different_parameters(self, param: str, other):
+        """
+        Метод для сравнения двух параметров между собой на соответствие
+        """
+        if param == 'result_docnum':
+            return False if self.result_docnum[:self.result_docnum.rfind('/')] == other.result_docnum[:other.result_docnum.rfind('/')] else True
+        return False if self.__card[self.IND_PROP[param]] == other.__card[other.IND_PROP[param]] else True
+
     def check_equals(self, other_card):
         """
         Метод для сравнения двух карточек, по ключевым параметрам
@@ -931,7 +940,7 @@ class CardFgis:
                     self.org_title == other_card.org_title and
                     self.verification_date == other_card.verification_date):
                 return True
-            else
+            else:
                 return False
         else:
             if (self.mi_mitnumber == other_card.mi_mitnumber and
@@ -942,7 +951,7 @@ class CardFgis:
                     self.org_title == other_card.org_title and
                     self.verification_date == other_card.verification_date):
                 return True
-            else
+            else:
                 return False
 
     def check_equals_full(self, other):
@@ -951,7 +960,29 @@ class CardFgis:
         Должен возвращать словарь с количеством параметров, по которым расхождения,
         а так же список этих параметров
         """
-        pass
+        # Пустой словарь с информацией по различиям
+        different_dict = {'different': []}
+        # Счётчик количества различий
+        count_different = 0
+        for param in list(self.IND_PROP.keys())[:13]:
+            if self.check_different_parameters(param, other):
+                count_different += 1
+                different_dict['different'].append(param)
+
+        different_dict['count'] = count_different
+
+        return different_dict
+        # if self.check_different_parameters('mi_mitnumber', other):
+        #     count_different += 1
+        #     different_dict['different'].append('mi_mitnumber')
+        # if self.check_different_parameters('mi_modification', other):
+        #     count_different += 1
+        #     different_dict['different'].append('mi_modification')
+        # if self.check_different_parameters('mi_number', other):
+        #     count_different += 1
+        #     different_dict['different'].append('mi_number')
+        # if self.che
+
 
 
 def main():

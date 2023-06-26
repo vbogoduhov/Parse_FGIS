@@ -28,9 +28,6 @@
 import sys
 import os
 import argparse
-
-import requests
-
 import app_logger
 import fgis_eapi
 import localdb
@@ -110,7 +107,7 @@ def parse_args():
     parser.add_argument('-m', '--mode', type=str, default='local', help="Режим запуска скрипта: "
                                                                        "fgis - для сбора данных из БД ФГИС,"
                                                                        "local - для локальной работы и заполнения файла Excel,"
-                                                                       "unknow - когда неизвестен год последней поверки, и нужно проверить СИ"
+                                                                       "unknow - когда неизвестен год последней поверки, и нужно проверить СИ,"
                                                                        "по годам, начиная с известного года последней поверки,"
                                                                        "change_serial - для добавления 0 вначале номера для ЕвроАльфа")
     parser.add_argument('--START', type=int, default=13, help='Начальная строка')
@@ -288,7 +285,7 @@ def check_dict_for_write(dict_for_write, database):
     :return: словарь, готовый к записи
     """
     if not database.check_tbmetrology_value(dict_for_write):
-        logger.info(f"Попытка записи данных в БД")
+        logger.info("Попытка записи данных в БД")
         title = dict_for_write['title']
         modification = dict_for_write['modification']
         type_title = dict_for_write['mitype']
@@ -350,6 +347,7 @@ def check_verif_date(card: localdb.CardFgis, work_mode,
             card_last_verif_year = datetime.strptime(card.verification_date, "%d.%m.%Y").year
             if type(verif_year) is int:
                 return True if verif_year == card_last_verif_year else False
+
 
 def pass_to_si_list(keywords: str):
     """
@@ -508,7 +506,7 @@ def set_href(card, coord, workbook, work_mode='local', str_verif_date=None, veri
     :param verif_year: год последней поверки СИ - при режиме 'unknow_local'
     :return: True or False
     """
-    if not card == None:
+    if card is not None:
         match work_mode:
             case 'local':
                 # Получаем дату последней поверки по текущему СИ из объекта CardFgis
@@ -595,10 +593,10 @@ def local_request(serial, si, year, current_type, database, work_mode, verif_yea
     # lst_card = database.get_card_for_si(dict_filter)
     lst_card = database.get_card_si(dict_filter['serial_si'], dict_filter['type_si'])
 
-    if not type(lst_card) == list and not lst_card == None:
+    if not type(lst_card) == list and lst_card is not None:
         return lst_card
     else:
-        if not lst_card == None:
+        if lst_card is not None:
             logger.info(f"Получено для текущего СИ {len(lst_card)} значений из БД.")
         else:
             logger.info(f"Ничего не получено для текущего СИ {serial}")
@@ -646,8 +644,8 @@ def parse_list_card(lst, type_si, verif_date, work_mode):
                     current_mod = card.mi_modification
                     parse_type = TypeParseSi(current_type, type_si)
                     res_parse = parse_type.parse()
-                    parse_mod = TypeParseSi(current_mod, type_si)
-                    res_parse_mod = parse_mod.parse()
+                    # parse_mod = TypeParseSi(current_mod, type_si)
+                    # res_parse_mod = parse_mod.parse()
                     if check_true(res_parse) and date == card.verification_date:
                         res_dict[ind] = card
         case 'unknow_local':
@@ -660,7 +658,7 @@ def parse_list_card(lst, type_si, verif_date, work_mode):
                     parse_type = TypeParseSi(current_type, type_si)
                     res_parse = parse_type.parse()
                     parse_mod = TypeParseSi(current_mod, type_si)
-                    res_parse_mod = parse_mod.parse()
+                    # res_parse_mod = parse_mod.parse()
                     if check_true(res_parse) and check_verif_date(card, work_mode, verif_year=verif_date):
                         res_dict[ind] = card
 
@@ -749,7 +747,7 @@ def work_on_fgis(**kwargs):
             # Год последней поверки
             last_verif_year = kwargs['last_verif_year']
             # Год следующей поверки
-            valid_year = kwargs['valid_year']
+            # valid_year = kwargs['valid_year']
             # Проверяем параметр serial
             if serial != '' and serial != current_serial:
                 logger.info(
@@ -768,10 +766,10 @@ def work_on_fgis(**kwargs):
             # Год последней поверки
             last_verif_year = kwargs['last_verif_year']
             # Год следующей поверки
-            valid_year = kwargs['valid_year']
+            # valid_year = kwargs['valid_year']
             # Проверяем, если серийный номер, тип и год последней поверки не None
             # то начинаем запросы к ФГИС
-            if current_serial != None and mitype != None and last_verif_year != None:
+            if current_serial is not None and mitype is not None and last_verif_year is not None:
                 # Цикл по годам текущего СИ
                 for year in range(last_verif_year, datetime.now().year + 1):
                     request_and_write(current_serial, database, last_verif_year, mitype, current_si)
@@ -790,7 +788,7 @@ def work_on_local(**kwargs):
     # Объект локальной БД
     database = kwargs['database'] if 'database' in kwargs else None
     # Год следующей поверки
-    valid_year = kwargs['valid_year'] if 'valid_year' in kwargs else None
+    # valid_year = kwargs['valid_year'] if 'valid_year' in kwargs else None
     # Год последней поверки
     last_verif_year = kwargs['last_verif_year'] if 'last_verif_year' in kwargs else None
     # Книга Excel
@@ -827,8 +825,6 @@ def work_on_local(**kwargs):
             check_result_local_request(res_local_request, (current_row, href_col), workbook, work_mode, verif_year=last_verif_year)
 
 
-
-
 def work_on_change_serial(**kwargs):
     """
     Функция работает при выборе режима работы скрипта 'change_serial'
@@ -846,7 +842,7 @@ def work_on_change_serial(**kwargs):
 
 
 def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work_mode: str,
-                serial_number: str, start_row: int, name_setting_file: str):
+                    serial_number: str, start_row: int, name_setting_file: str):
     """
     Функция по обработке файла с заданными параметрами
 
@@ -884,13 +880,13 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
     for current_si in keyword_si.split(sep=' '):
         # Нужно получить номера столбцов для соответствующего вида СИ
         # Столбец типа СИ
-        type_col = COLUMNS_SI[current_si]['type']
+        # type_col = COLUMNS_SI[current_si]['type']
         # Столбец серийного номера СИ
         serial_col = COLUMNS_SI[current_si]['serial']
         # Столбец даты последней поверки
         verif_date_col = COLUMNS_SI[current_si]['verif_date']
         # Столбец даты следующей поверки
-        valid_date_col = COLUMNS_SI[current_si]['valid_date']
+        # valid_date_col = COLUMNS_SI[current_si]['valid_date']
         # Столбец для ссылки на корточку СИ
         href_col = COLUMNS_SI[current_si]['href']
         logger.info(f"Начинаем обход строк файла для вида СИ: {current_si}")
@@ -920,7 +916,7 @@ def file_processing(name_excel_file: str, verif_year: int, keyword_si: str, work
                     # Если режим работы - unknow
                     case 'unknow':
                         # Запуск функции для обработки данных по СИ при режиме unknow
-                        if verif_year == 0 and valid_year != None:
+                        if verif_year == 0 and valid_year is not None:
                             work_on_fgis(work_mode=work_mode, serial=serial_number,
                                          inform_si=inform_si, database=database,
                                          valid_year=valid_year, last_verif_year=last_verif_year, current_si=current_si, current_row=current_row)
@@ -975,7 +971,6 @@ def main():
     start = namespace_argv.START
     namefile_setting = namespace_argv.setfile
 
-
     # Проверяем введённые параметры на корректность,
     # недопустим режим unknow и год 0
     if verif_year != 0 and (mode in ['unknow', 'unknow_local']):
@@ -988,7 +983,7 @@ def main():
         joke_answer = input(f"Вы не задали год для обработки, но при этом выбрали режим {mode}."
                             f"В таком случае будет использован текущий год - {datetime.now().year}? (Y/n): ")
         if joke_answer.lower() == 'n':
-            logger.warning(f"Пользователь отказался от дальнейшего выполнения. Прекращаем работу и по домам!")
+            logger.warning("Пользователь отказался от дальнейшего выполнения. Прекращаем работу и по домам!")
             print("Ути, какие мы ранимые...ну тогда всё.")
             sys.exit()
         else:
@@ -1296,7 +1291,7 @@ def main():
         print("Отработала функция work_on_change_serial")
 
     def work_on_unknow_local(last_verif_year: int, si_for_local: str, namefile: str, start_row: int,
-                database: localdb.WorkDb):
+                            database: localdb.WorkDb):
         """
         Функция для получения данных по СИ из локальной БД, предполагая, что год
         последней поверки - текущий год

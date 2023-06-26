@@ -100,9 +100,9 @@ def parse_args():
     parser.add_argument('-n', '--namefile', type=str,
                         default="Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023_for_test.xlsx",
                         help='Имя файла Excel для обработки')
-    parser.add_argument('-y', '--years', type=int, default=2021,
+    parser.add_argument('-y', '--years', type=int, default=0,
                         help='Год поверки СИ для выборки')
-    parser.add_argument('-k', '--keyword', type=str, default='ПУ',
+    parser.add_argument('-k', '--keyword', type=str, default='ТТ ТН',
                         help="СИ по которому нужно получить данные из ФГИС или локальной БД: "
                              "ПУ - приборы учёта, ТТ - трансформаторы тока, ТН - трансформаторы напряжения."
                              "Можно вводить несколько, в таком случае значения должны быть разделена пробелом,"
@@ -113,7 +113,7 @@ def parse_args():
                                                                        "unknow - когда неизвестен год последней поверки, и нужно проверить СИ"
                                                                        "по годам, начиная с известного года последней поверки,"
                                                                        "change_serial - для добавления 0 вначале номера для ЕвроАльфа")
-    parser.add_argument('--START', type=int, default=274, help='Начальная строка')
+    parser.add_argument('--START', type=int, default=13, help='Начальная строка')
     parser.add_argument('-cfg', '--setfile', type=str, default='settings.ini',
                         help='Файл с настройками подключения к локальной БД')
     logger.info("Парсинг параметров командной строки закончен")

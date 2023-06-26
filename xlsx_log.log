@@ -4533,3 +4533,14 @@
 2023-06-22 08:21:55,125 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <time data '23.03..2018' does not match format '%d.%m.%Y'>
 2023-06-22 10:29:57,581 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <unconverted data remains: г>
 2023-06-22 10:29:57,597 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <unconverted data remains: г>
+2023-06-26 12:17:49,431 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <time data '23.03..2018' does not match format '%d.%m.%Y'>
+2023-06-26 12:26:42,640 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <unconverted data remains: г>
+2023-06-26 12:26:42,640 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <unconverted data remains: г>
+2023-06-26 12:47:36,668 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <unconverted data remains: г>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:03:10,716 - [WARNING] - xlsx - (xlsx.py)._change_type_date(326) - Невозможно привести дату к типу datetime. Ошибка <strptime() argument 1 must be str, not float>
+2023-06-26 13:07:11,734 - [WARNING] - xlsx - (xlsx.py).save(616) - Не удалось сохранить файл: .\Перечень ТУ АСКУЭ ООСС АСКУЭ Приложения к СТО  2023г.  итог 1 кв._20_06_2023.xlsx. Ошибка: name 'namefile' is not defined
